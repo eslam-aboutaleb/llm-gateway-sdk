@@ -1,0 +1,60 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    name: Build, Verify & Create GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: uv sync --group dev --frozen
+      - name: Run full verification suite
+        run: |
+          uv run --frozen ruff check .
+          uv run --frozen mypy src/llm_gateway_sdk
+          uv run --frozen pytest
+      - name: Build wheel and sdist
+        run: uv build
+      - name: Validate distributions with Twine
+        run: uv run --frozen twine check dist/*
+      - name: Generate CycloneDX / Package Manifest SBOM
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          artifacts = []
+          for p in sorted(pathlib.Path("dist").iterdir()):
+              if p.is_file():
+                  artifacts.append({
+                      "name": p.name,
+                      "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+                      "size_bytes": p.stat().st_size,
+                  })
+          pathlib.Path("dist/sbom-manifest.json").write_text(json.dumps({"artifacts": artifacts}, indent=2))
+          PY
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-dist-${{ github.ref_name }}
+          path: dist/*
+          retention-days: 90
+

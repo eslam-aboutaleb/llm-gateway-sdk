@@ -1,0 +1,172 @@
+[build-system]
+requires = ["hatchling>=1.24.0,<1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llm-gateway-sdk"
+version = "0.1.0"
+description = "Lightweight, reusable OpenAI-compatible Python SDK for self-hosted LiteLLM Gateways"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Eslam Aboutaleb" }
+]
+maintainers = [
+    { name = "Eslam Aboutaleb" }
+]
+keywords = [
+    "llm",
+    "gateway",
+    "litellm",
+    "openai",
+    "sdk",
+    "ai",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+    "openai>=1.40.0,<3.0.0",
+]
+
+[project.optional-dependencies]
+settings = [
+    "pydantic-settings>=2.2.0,<3.0.0",
+]
+structured = [
+    "instructor>=1.4.0,<2.0.0",
+]
+langchain = [
+    "langchain-openai>=0.2.0,<2.0.0",
+]
+observability = [
+    "traceloop-sdk>=0.30.0,<1.0.0",
+]
+all = [
+    "pydantic-settings>=2.2.0,<3.0.0",
+    "instructor>=1.4.0,<2.0.0",
+    "langchain-openai>=0.2.0,<2.0.0",
+    "traceloop-sdk>=0.30.0,<1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/eslam-aboutaleb/llm-gateway-sdk"
+Repository = "https://github.com/eslam-aboutaleb/llm-gateway-sdk"
+Issues = "https://github.com/eslam-aboutaleb/llm-gateway-sdk/issues"
+Documentation = "https://github.com/eslam-aboutaleb/llm-gateway-sdk/tree/main/docs"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0,<10.0.0",
+    "pytest-asyncio>=0.23.0,<2.0.0",
+    "pytest-cov>=5.0.0,<8.0.0",
+    "ruff>=0.6.0,<1.0.0",
+    "mypy>=1.10.0,<2.0.0",
+    "pydantic-settings>=2.2.0,<3.0.0",
+    "langchain-openai>=0.2.0,<2.0.0",
+    "build>=1.2.0,<2.0.0",
+    "twine>=5.0.0,<7.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llm_gateway_sdk"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/docs",
+    "/examples",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/SECURITY.md",
+    "/CONTRIBUTING.md",
+    "/pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers"
+markers = [
+    "live: opt-in live integration tests against a running LiteLLM gateway (requires LLM_GATEWAY_LIVE_TESTS=true)",
+]
+
+[tool.coverage.run]
+source = ["llm_gateway_sdk"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 90
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests", "examples"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "UP",
+    "SIM",
+    "S",
+    "RET",
+    "PIE",
+    "ARG",
+    "PTH",
+    "RUF",
+]
+ignore = [
+    "S101", # assert is standard in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108", "ARG001", "ARG002", "ARG005"]
+"examples/**" = ["S105", "S106"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+packages = ["llm_gateway_sdk"]
+
+[[tool.mypy.overrides]]
+module = [
+    "instructor",
+    "langchain_openai",
+    "langchain_openai.*",
+    "traceloop.*",
+]
+ignore_missing_imports = true
+
+

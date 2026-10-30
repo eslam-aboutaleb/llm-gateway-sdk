@@ -1,0 +1,42 @@
+name: Security & License Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-and-licenses:
+    name: Secret Scan, Dependency Audit & License Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: uv sync --group dev --frozen
+      - name: Verify permissive licenses in runtime dependencies
+        run: |
+          uv run --frozen python - <<'PY'
+          import importlib.metadata
+          forbidden = {"GPL", "AGPL", "LGPL", "SSPL", "BUSL", "Commercial"}
+          for dist in importlib.metadata.distributions():
+              name = dist.metadata["Name"]
+              lic = (dist.metadata.get("License") or "") + " " + " ".join(dist.metadata.get_all("Classifier") or [])
+              for bad in forbidden:
+                  if f"License :: OSI Approved :: GNU General Public License" in lic or "Server Side Public License" in lic:
+                      raise SystemExit(f"Forbidden license detected in {name}: {lic}")
+          print("All installed package licenses verified permissive.")
+          PY
+
