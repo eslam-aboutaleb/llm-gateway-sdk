@@ -24,11 +24,11 @@ jobs:
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: "3.11"
-      - name: Install dependencies
-        run: uv sync --group dev --frozen
+      - name: Install runtime dependencies
+        run: uv sync --no-dev --all-extras --frozen
       - name: Verify permissive licenses in runtime dependencies
         run: |
-          uv run --frozen python - <<'PY'
+          uv run --no-dev --frozen python - <<'PY'
           import importlib.metadata
           forbidden_tokens = (
               "GNU General Public License",
