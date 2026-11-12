@@ -33,7 +33,7 @@ jobs:
       - name: Ruff format check
         run: uv run --frozen ruff format --check .
       - name: Strict Mypy type check
-        run: uv run --frozen mypy src/llm_gateway_sdk
+        run: uv run --frozen mypy
 
   test-matrix:
     name: Unit, Integration & Contract Tests (Python ${{ matrix.python-version }})
@@ -76,7 +76,7 @@ jobs:
           s = GatewaySettings(base_url='https://gateway.example.com/v1', api_key='sk-test')
           c = s.create_client()
           c.close()
-          for optional_pkg in ('pydantic_settings', 'instructor', 'langchain_openai', 'traceloop'):
+          for optional_pkg in ('openai', 'pydantic_settings', 'instructor', 'langchain_openai', 'traceloop'):
               assert importlib.util.find_spec(optional_pkg) is None, f'{optional_pkg} should not be in core'
           "
 

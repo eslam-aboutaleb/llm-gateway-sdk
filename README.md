@@ -1,118 +1,147 @@
 # `llm-gateway-sdk`
 
-**A Lightweight, Reusable, OpenAI-Compatible Python SDK for Self-Hosted LiteLLM Gateways**
+**Provider-Agnostic, Framework-Agnostic Python SDK for Self-Hosted LLM Gateways**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 [![Typed: PEP 561](https://img.shields.io/badge/typing-PEP%20561-green.svg)](src/llm_gateway_sdk/py.typed)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-`llm-gateway-sdk` standardizes how Python applications connect to a self-hosted [LiteLLM Gateway](https://github.com/eslam-aboutaleb/llm-gateway). It provides a clean, layered configuration and client-factory boundary around the official `openai` Python SDK—without introducing another LLM framework, middleware server, or heavyweight runtime dependency.
+`llm-gateway-sdk` is a lightweight, strongly-typed Python SDK that standardizes how services connect to a self-hosted [LLM Gateway](https://github.com/eslam-aboutaleb/llm-gateway).
 
----
-
-## Why Does This SDK Exist?
-
-1. **Eliminates Duplicated Gateway Boilerplate:** Centralizes URL validation, virtual API key validation, secret redaction, timeout settings, and attribution headers across repositories (`polymarket-ai-trading` and future services).
-2. **Prevents Retry Multiplication (`max_retries=0`):** The LiteLLM Gateway already performs upstream provider retries and fallbacks. The official `openai` SDK defaults to `max_retries=2`, which can inadvertently multiply retries up to 9x. `llm-gateway-sdk` defaults to `max_retries=0`.
-3. **Prevents Accidental Gateway Bypass:** Never silently falls back to `OPENAI_API_KEY` or accepts `LITELLM_MASTER_KEY`.
-4. **Returns Native OpenAI Clients:** `settings.create_client()` returns `openai.OpenAI` and `settings.create_async_client()` returns `openai.AsyncOpenAI`. Consumers retain 100% access to native OpenAI resources, types, streaming, tool calling, and exceptions.
-5. **Zero Heavyweight Dependencies in Core:** The core package depends only on `openai>=1.40.0,<3.0.0`. Framework adapters (`pydantic-settings`, `instructor`, `langchain-openai`, `traceloop-sdk`) live in isolated optional extras.
+Built directly on **`httpx` and `pydantic`** with **zero dependency on `openai`, `langchain`, or any vendor/framework SDK**, it provides synchronous and asynchronous clients (`GatewayClient` and `AsyncGatewayClient`) for **chat completions**, **SSE streaming**, **tool calling**, **vector embeddings**, and **model discovery**—with strict URL/credential validation, automatic secret redaction, request attribution headers, and safe retry defaults (`max_retries=0`).
 
 ---
 
-## Layered Architecture
+## Table of Contents
 
-```text
-+-------------------------------------------------------------------+
-| Layer 4: Optional Ecosystem Adapters (llm_gateway_sdk.integrations)|
-|   - pydantic_settings.py  - instructor.py                         |
-|   - langchain.py          - openllmetry.py                        |
-+-------------------------------------------------------------------+
-                                 |
-                                 v
-+-------------------------------------------------------------------+
-| Layer 3: Client Factories (llm_gateway_sdk.clients)               |
-|   - create_client() -> openai.OpenAI                              |
-|   - create_async_client() -> openai.AsyncOpenAI                   |
-+-------------------------------------------------------------------+
-                                 |
-                                 v
-+-------------------------------------------------------------------+
-| Layer 2: Configuration Model (llm_gateway_sdk.settings)           |
-|   - GatewaySettings (immutable dataclass, from_env(), redaction)  |
-+-------------------------------------------------------------------+
-                                 |
-                                 v
-+-------------------------------------------------------------------+
-| Layer 1: Validation & Security Boundary (llm_gateway_sdk.validation)|
-|   - URL, API key, timeout, retry, dimension & header validators   |
-+-------------------------------------------------------------------+
-                                 |
-                                 v
-+-------------------------------------------------------------------+
-| Layer 0: Domain Primitives (constants.py, exceptions.py)          |
-+-------------------------------------------------------------------+
-```
+- [30-Second Quickstart](#30-second-quickstart)
+- [Why `llm-gateway-sdk`?](#why-llm-gateway-sdk)
+- [Installation](#installation)
+- [Configuration Reference](#configuration-reference)
+- [Usage Examples](#usage-examples)
+  - [1. Synchronous Chat Completion](#1-synchronous-chat-completion)
+  - [2. Asynchronous Chat & Real-Time SSE Streaming](#2-asynchronous-chat--real-time-sse-streaming)
+  - [3. Tool / Function Calling](#3-tool--function-calling)
+  - [4. Vector Embeddings](#4-vector-embeddings)
+  - [5. FastAPI Lifespan Integration](#5-fastapi-lifespan-integration)
+  - [6. Error Handling & Request IDs](#6-error-handling--request-ids)
+- [Optional Ecosystem Integrations](#optional-ecosystem-integrations)
+- [Gateway Model Aliases & Route Contract](#gateway-model-aliases--route-contract)
+- [Layered Architecture](#layered-architecture)
+- [Development & Testing](#development--testing)
+- [Documentation Index](#documentation-index)
+- [License](#license)
 
 ---
 
-## Installation
+## 30-Second Quickstart
 
-### Core Package (Minimal Footprint)
+**1. Install the SDK:**
 
 ```bash
 pip install llm-gateway-sdk
 ```
 
-Or via `uv` from a pinned Git tag:
+**2. Set your Gateway URL and Consumer Virtual Key:**
 
 ```bash
+export LLM_GATEWAY_BASE_URL="https://gateway.example.com/v1"
+export LLM_GATEWAY_API_KEY="sk-your-consumer-virtual-key"
+export LLM_GATEWAY_DEFAULT_MODEL="general-fast"
+```
+
+**3. Call your Gateway:**
+
+```python
+from llm_gateway_sdk import GatewaySettings
+
+settings = GatewaySettings.from_env()
+
+with settings.create_client() as client:
+    response = client.complete(
+        messages=[{"role": "user", "content": "Summarize API gateways in one sentence."}],
+    )
+    print(response.content)
+```
+
+---
+
+## Why `llm-gateway-sdk`?
+
+| Problem with Vendor/Framework SDK Boilerplate | How `llm-gateway-sdk` Solves It |
+|---|---|
+| **Vendor & Framework Coupling:** Importing `openai` or `langchain` just to send HTTP JSON/SSE requests to your own self-hosted gateway couples your services to third-party SDK release cycles and ~90 transitive dependencies. | **100% Provider- & Framework-Agnostic:** Built directly on `httpx` and `pydantic`. Supports both concise top-level methods (`client.complete()`, `client.stream()`, `client.embed()`, `client.list_models()`, `client.health()`) and resource namespaces (`client.chat.completions.create()`, `client.embeddings.create()`, `client.models.list()`). |
+| **Retry Multiplication (Up to 9x Calls):** Vendor SDKs default to `max_retries=2` (3 attempts), while the LLM Gateway also retries upstream (`num_retries: 2`), multiplying failures into 9 upstream calls and risking duplicate token billing. | Defaults to **`max_retries=0`** on all clients so retry and fallback logic stays centralized in the LLM Gateway router. |
+| **Accidental Gateway Bypass:** Missing env vars can cause vendor SDKs to silently fall back to `OPENAI_API_KEY` and hit upstream providers directly. | **Fail-closed configuration:** Never reads `OPENAI_API_KEY` and actively rejects `LITELLM_MASTER_KEY` in consumer services. |
+| **Credential Leaks in Logs & Tracebacks:** Misconfigured URLs, `repr(settings)`, or Pydantic `ValidationError` dumps can expose API keys in logs. | **Automatic secret redaction (`[REDACTED]`):** Masks keys in `repr()`, `str()`, `to_dict()`, gateway error messages, and Pydantic validation errors. |
+
+---
+
+## Installation
+
+### Core Package (Minimal Footprint: `httpx` + `pydantic` only)
+
+```bash
+# Using pip
+pip install llm-gateway-sdk
+
+# Using uv (from PyPI or pinned Git tag)
+uv add llm-gateway-sdk
 uv add "llm-gateway-sdk @ git+https://github.com/eslam-aboutaleb/llm-gateway-sdk.git@v0.1.0"
 ```
 
 ### Optional Extras
 
-```bash
-# Pydantic Settings integration
-pip install "llm-gateway-sdk[settings]"
+| Extra | Install Command | Provided Module & Capabilities |
+|---|---|---|
+| **`settings`** | `pip install "llm-gateway-sdk[settings]"` | `llm_gateway_sdk.integrations.pydantic_settings` (`GatewayBaseSettings` with secret-redacted validation) |
 
-# Instructor structured outputs
-pip install "llm-gateway-sdk[structured]"
+---
 
-# LangChain (ChatOpenAI & OpenAIEmbeddings)
-pip install "llm-gateway-sdk[langchain]"
+## Configuration Reference
 
-# OpenLLMetry / OpenTelemetry observability
-pip install "llm-gateway-sdk[observability]"
+Copy [`.env.example`](.env.example) to `.env` or set the following environment variables:
 
-# All optional integrations
-pip install "llm-gateway-sdk[all]"
+| Environment Variable | Short / Legacy Aliases | Required | Default | Description |
+|---|---|---|---|---|
+| `LLM_GATEWAY_BASE_URL` | `LLM_GATEWAY_URL`, `LITELLM_API_BASE` | **Yes** | — | HTTP(S) gateway base URL including `/v1` (e.g. `https://gateway.example.com/v1`) |
+| `LLM_GATEWAY_API_KEY` | `LLM_GATEWAY_KEY`, `LITELLM_API_KEY` | **Yes** | — | Consumer virtual API key issued by the gateway administrator |
+| `LLM_GATEWAY_DEFAULT_MODEL` | `LLM_GATEWAY_MODEL`, `LITELLM_MODEL` | No | `None` | Default chat completion model alias (e.g. `general-fast`) |
+| `LLM_GATEWAY_DEFAULT_EMBEDDING_MODEL` | `LLM_GATEWAY_EMBEDDING_MODEL`, `LITELLM_EMBEDDING_MODEL` | No | `None` | Default embedding model alias (e.g. `rag-embedding`) |
+| `LLM_GATEWAY_EMBEDDING_DIMENSIONS` | `LITELLM_EMBEDDING_DIMENSIONS`, `RAG_EMBEDDING_DIMENSIONS` | No | `None` | Positive integer vector dimensions (e.g. `1536`) |
+| `LLM_GATEWAY_TIMEOUT` | — | No | `30.0` | Request timeout in seconds (`> 0`) |
+| `LLM_GATEWAY_MAX_RETRIES` | — | No | `0` | Client-side retries (`0` recommended; gateway handles retries) |
+| `LLM_GATEWAY_APP_NAME` | — | No | `None` | Application name sent in `X-Gateway-App-Name` & `X-Title` headers |
+| `LLM_GATEWAY_ENVIRONMENT` | — | No | `None` | Environment name (e.g. `production`) sent in `X-Gateway-Environment` |
+| `LLM_GATEWAY_VERIFY_SSL` | — | No | `true` | TLS certificate verification (`true` / `false`) |
+
+You can also construct `GatewaySettings` directly in code or override specific environment variables:
+
+```python
+from llm_gateway_sdk import GatewaySettings
+
+# Load from environment with explicit overrides
+settings = GatewaySettings.from_env(
+    app_name="market-analyzer",
+    environment="production",
+    timeout=45.0,
+)
+
+# Or construct directly without environment variables
+settings = GatewaySettings(
+    base_url="https://gateway.example.com/v1",
+    api_key="sk-consumer-virtual-key",
+    default_model="general-fast",
+    default_embedding_model="rag-embedding",
+)
 ```
 
 ---
 
-## Configuration
+## Usage Examples
 
-Set the following environment variables (see [`.env.example`](.env.example)):
-
-```dotenv
-LLM_GATEWAY_BASE_URL=https://gateway.example.com/v1
-LLM_GATEWAY_API_KEY=sk-consumer-virtual-key
-
-LLM_GATEWAY_DEFAULT_MODEL=general-fast
-LLM_GATEWAY_DEFAULT_EMBEDDING_MODEL=rag-embedding
-LLM_GATEWAY_EMBEDDING_DIMENSIONS=1536
-
-LLM_GATEWAY_TIMEOUT=30
-LLM_GATEWAY_MAX_RETRIES=0
-
-LLM_GATEWAY_APP_NAME=polymarket-ai-trading
-LLM_GATEWAY_ENVIRONMENT=production
-```
-
----
-
-## Quickstart
+Runnable scripts for every pattern below are available in the [`examples/`](examples/) directory.
 
 ### 1. Synchronous Chat Completion
 
@@ -122,107 +151,253 @@ from llm_gateway_sdk import GatewaySettings
 settings = GatewaySettings.from_env()
 
 with settings.create_client() as client:
-    response = client.chat.completions.create(
-        model="general-fast",
-        messages=[{"role": "user", "content": "Hello"}],
+    response = client.complete(
+        model=settings.default_model or "general-fast",
+        messages=[
+            {"role": "system", "content": "You are a concise assistant."},
+            {"role": "user", "content": "Hello!"},
+        ],
     )
-    print(response.choices[0].message.content)
+    print(response.content)
 ```
 
-### 2. Asynchronous Chat Completion
+### 2. Asynchronous Chat & Real-Time SSE Streaming
+
+```python
+import asyncio
+from llm_gateway_sdk import GatewaySettings
+
+
+async def main() -> None:
+    settings = GatewaySettings.from_env()
+
+    async with settings.create_async_client() as client:
+        async with await client.stream(
+            model=settings.default_model or "general-fast",
+            messages=[{"role": "user", "content": "Explain why centralized LLM routing matters."}],
+        ) as stream:
+            async for delta_text in stream.iter_text():
+                print(delta_text, end="", flush=True)
+            print()
+
+
+asyncio.run(main())
+```
+
+### 3. Tool / Function Calling
+
+```python
+import json
+from llm_gateway_sdk import GatewaySettings
+
+settings = GatewaySettings.from_env()
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_market_price",
+            "description": "Retrieve current market price for a ticker",
+            "parameters": {
+                "type": "object",
+                "properties": {"ticker": {"type": "string"}},
+                "required": ["ticker"],
+            },
+        },
+    }
+]
+
+with settings.create_client() as client:
+    response = client.complete(
+        model="agent-tools",
+        messages=[{"role": "user", "content": "Check the price for BTC-USD"}],
+        tools=tools,
+        tool_choice="required",
+    )
+    tool_call = response.tool_calls[0]
+    print(tool_call.function.name, json.loads(tool_call.function.arguments))
+```
+
+### 4. Vector Embeddings
 
 ```python
 from llm_gateway_sdk import GatewaySettings
 
 settings = GatewaySettings.from_env()
 
-async with settings.create_async_client() as client:
-    response = await client.chat.completions.create(
-        model="general-fast",
-        messages=[{"role": "user", "content": "Hello"}],
+with settings.create_client() as client:
+    response = client.embed(
+        model=settings.default_embedding_model or "rag-embedding",
+        input=["First document to embed", "Second document to embed"],
+        dimensions=settings.embedding_dimensions or 1536,
     )
-    print(response.choices[0].message.content)
+    print(f"Generated {len(response.vectors)} embeddings of {len(response.embedding)} dims")
 ```
 
-### 3. Streaming
+### 5. FastAPI Lifespan Integration
+
+Create a single shared `AsyncGatewayClient` at startup to reuse the underlying HTTP connection pool across requests:
 
 ```python
-stream = await async_client.chat.completions.create(
-    model="general-fast",
-    messages=[{"role": "user", "content": "Explain this."}],
-    stream=True,
-)
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+from llm_gateway_sdk import GatewaySettings
 
-async for chunk in stream:
-    if chunk.choices:
-        print(chunk.choices[0].delta.content or "", end="")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = GatewaySettings.from_env()
+    async with settings.create_async_client() as client:
+        app.state.gateway_settings = settings
+        app.state.llm_client = client
+        yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.post("/chat")
+async def chat_endpoint(request: Request, prompt: str) -> dict[str, str | None]:
+    client = request.app.state.llm_client
+    res = await client.complete(
+        model="general-fast",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return {"reply": res.content}
 ```
 
-### 4. Vector Embeddings
+### 6. Error Handling & Request IDs
+
+Both configuration problems and runtime HTTP/network failures raise typed `GatewaySDKError` subclasses with full `request_id` traceability:
 
 ```python
-response = await async_client.embeddings.create(
-    model="rag-embedding",
-    input=["Example document"],
+from llm_gateway_sdk import (
+    GatewayAPIStatusError,
+    GatewayAuthenticationError,
+    GatewayConfigError,
+    GatewayRateLimitError,
+    GatewaySettings,
 )
-vector = response.data[0].embedding
+
+try:
+    settings = GatewaySettings.from_env()
+except GatewayConfigError as exc:
+    raise SystemExit(f"Invalid gateway configuration: {exc}")
+
+with settings.create_client() as client:
+    try:
+        response = client.complete(
+            model="general-fast",
+            messages=[{"role": "user", "content": "Hello"}],
+        )
+    except GatewayRateLimitError as exc:
+        print(f"Virtual key rate/budget limit reached (request_id={exc.request_id})")
+    except GatewayAuthenticationError as exc:
+        print(f"Invalid or expired virtual key (request_id={exc.request_id})")
+    except GatewayAPIStatusError as exc:
+        print(f"Gateway returned HTTP {exc.status_code} (request_id={exc.request_id})")
 ```
-
-### 5. Optional Integrations
-
-- **Instructor (`llm-gateway-sdk[structured]`):**
-  ```python
-  from llm_gateway_sdk.integrations.instructor import create_instructor_client
-
-  structured_client = create_instructor_client(client)
-  ```
-- **LangChain (`llm-gateway-sdk[langchain]`):**
-  ```python
-  from llm_gateway_sdk.integrations.langchain import create_chat_model
-
-  llm = create_chat_model(settings=settings, model="general-reasoning")
-  ```
-- **Pydantic Settings (`llm-gateway-sdk[settings]`):**
-  ```python
-  from llm_gateway_sdk.integrations.pydantic_settings import GatewayBaseSettings
-  ```
-- **OpenLLMetry (`llm-gateway-sdk[observability]`):**
-  ```python
-  from llm_gateway_sdk.integrations.openllmetry import configure_observability
-
-  configure_observability(settings, record_content=False)
-  ```
 
 ---
 
-## What Intentionally Remains in Consumer Applications?
+## Optional Ecosystem Integrations
 
-- Domain-specific prompts, agent workflows, and trading/business logic.
-- Application-specific model tier mappings (e.g., `CHEAP`, `STANDARD`, `STRONG`, `WRITER`).
-- Vector store schemas, SQLite/pgvector index management, and embedding fingerprint checks.
-- Gateway administration (`/key/*`, `/user/*`, `/team/*`, `/spend/*`).
+### Pydantic Settings (`llm-gateway-sdk[settings]`)
+
+Inherit from `GatewayBaseSettings` to embed gateway configuration into your service's Pydantic settings with automatic secret masking and `ValidationError` input redaction:
+
+```python
+from llm_gateway_sdk.integrations.pydantic_settings import GatewayBaseSettings
+
+
+class AppSettings(GatewayBaseSettings):
+    service_port: int = 8080
+
+
+app_settings = AppSettings()
+client = app_settings.create_gateway_client()
+```
 
 ---
 
-## Documentation
+## Gateway Model Aliases & Route Contract
 
-- [Quickstart Guide](docs/QUICKSTART.md)
-- [SDK Architecture & Layered Design](docs/SDK_ARCHITECTURE.md)
-- [Configuration Reference](docs/CONFIGURATION.md)
-- [Client Lifecycle & FastAPI Guide](docs/CLIENT_LIFECYCLE.md)
-- [Framework Integrations](docs/FRAMEWORK_INTEGRATIONS.md)
-- [Gateway Compatibility Matrix](docs/GATEWAY_COMPATIBILITY.md)
-- [Error Handling & Retry Safety](docs/ERROR_HANDLING.md)
-- [Security & Privacy Model](docs/SECURITY.md)
-- [Polymarket Migration Guide](docs/POLYMARKET_MIGRATION.md)
-- [Testing Guide](docs/TESTING.md)
-- [Versioning Policy](docs/VERSIONING.md)
-- [Release Process](docs/RELEASE_PROCESS.md)
-- [Third-Party License Inventory](docs/THIRD_PARTY_LICENSES.md)
+Standard model aliases configured on the companion [`llm-gateway`](https://github.com/eslam-aboutaleb/llm-gateway) (consumers can pass any alias authorized for their virtual key):
+
+| Model Alias | Mode | Typical Use Case |
+|---|---|---|
+| `general-fast` | `chat` | Low-latency chat, summarization, and classification |
+| `general-reasoning` | `chat` | Complex reasoning and multi-step analysis with automatic fallback |
+| `structured-output` | `chat` | Strict JSON schema / Pydantic model extraction |
+| `agent-tools` | `chat` | Single and parallel function/tool calling |
+| `rag-embedding` | `embedding` | 1,536-dimension vector embeddings for RAG indexing and search |
+
+> **Scope Boundary:** `llm-gateway-sdk` is strictly a **consumer inference SDK** (`/v1/chat/completions`, `/v1/embeddings`, `/v1/models`, `/health`). Gateway administration (`/key/*`, `/user/*`, `/team/*`, `/spend/*`) and application-specific domain logic remain outside this package.
+
+---
+
+## Layered Architecture
+
+The codebase enforces a strict 5-layer unidirectional dependency graph:
+
+```mermaid
+flowchart TD
+    L4["Layer 4: Optional Configuration Adapters<br/>(integrations/pydantic_settings.py)"]
+    L3["Layer 3: Gateway HTTP/SSE Clients<br/>(clients.py: GatewayClient, AsyncGatewayClient)"]
+    L2["Layer 2: Configuration & Response Models<br/>(settings.py: GatewaySettings, models.py: ChatResponse, EmbeddingResponse, GatewayStream)"]
+    L1["Layer 1: Validation & Security Boundary<br/>(validation.py: URL, key, timeout, header & origin validators)"]
+    L0["Layer 0: Domain Primitives<br/>(constants.py, exceptions.py)"]
+
+    L4 --> L3
+    L3 --> L2
+    L2 --> L1
+    L1 --> L0
+```
+
+---
+
+## Development & Testing
+
+All unit, integration, and gateway contract tests run **100% offline** using `httpx.MockTransport`—no live API keys or running gateway required:
+
+```bash
+# Install development dependencies
+uv sync --group dev
+
+# Run test suite with branch coverage (>= 90% required)
+uv run pytest --cov=llm_gateway_sdk --cov-report=term-missing
+
+# Run Ruff linter & formatter checks
+uv run ruff check .
+uv run ruff format --check .
+
+# Run strict Mypy type checking across src, tests, and examples
+uv run mypy
+```
+
+---
+
+## Documentation Index
+
+| Guide | Description |
+|---|---|
+| [Quickstart Guide](docs/QUICKSTART.md) | Step-by-step setup and basic calls |
+| [SDK Architecture & Layered Design](docs/SDK_ARCHITECTURE.md) | SOLID design principles and layer boundaries |
+| [Configuration Reference](docs/CONFIGURATION.md) | Environment variables, legacy aliases, and URL rules |
+| [Client Lifecycle & FastAPI Guide](docs/CLIENT_LIFECYCLE.md) | Connection pooling, context managers, and FastAPI lifespan |
+| [Framework Integrations](docs/FRAMEWORK_INTEGRATIONS.md) | Pydantic Settings (`GatewayBaseSettings`) integration |
+| [Gateway Compatibility Matrix](docs/GATEWAY_COMPATIBILITY.md) | Allowed routes, model aliases, timeouts, and status codes |
+| [Error Handling & Retry Safety](docs/ERROR_HANDLING.md) | Exception hierarchy, `request_id` debugging, and retry safety |
+| [Security & Privacy Model](docs/SECURITY.md) | Virtual key enforcement, secret redaction, and origin checks |
+| [Polymarket Migration Guide](docs/POLYMARKET_MIGRATION.md) | Migrating `polymarket-ai-trading` to `llm-gateway-sdk` |
+| [Testing Guide](docs/TESTING.md) | Offline mock transport tests and opt-in `@pytest.mark.live` suite |
+| [Versioning Policy](docs/VERSIONING.md) | Semantic Versioning and gateway version decoupling |
+| [Release Process](docs/RELEASE_PROCESS.md) | Pre-release checklist, tagging, and package verification |
+| [Third-Party License Inventory](docs/THIRD_PARTY_LICENSES.md) | Permissive license audit for core and optional dependencies |
 
 ---
 
 ## License
 
 Released under the [MIT License](LICENSE).
-

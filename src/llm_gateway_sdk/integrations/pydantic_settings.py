@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -21,13 +22,15 @@ except ImportError as exc:  # pragma: no cover
         "Install it with: pip install 'llm-gateway-sdk[settings]'"
     ) from exc
 
+from llm_gateway_sdk.constants import LEGACY_LITELLM_MASTER_KEY_ENV
 from llm_gateway_sdk.exceptions import MissingGatewayConfigError
 from llm_gateway_sdk.settings import GatewaySettings
-from llm_gateway_sdk.validation import validate_base_url
+from llm_gateway_sdk.validation import validate_api_key, validate_base_url
 
 if TYPE_CHECKING:
     import httpx
-    from openai import AsyncOpenAI, OpenAI
+
+    from llm_gateway_sdk.clients import AsyncGatewayClient, GatewayClient
 
 __all__ = [
     "GatewayBaseSettings",
@@ -53,20 +56,33 @@ class GatewayBaseSettings(BaseSettings):
 
     gateway_base: SecretStr | None = Field(
         default=None,
-        validation_alias=AliasChoices("LLM_GATEWAY_BASE_URL", "LITELLM_API_BASE"),
+        validation_alias=AliasChoices(
+            "LLM_GATEWAY_BASE_URL",
+            "LLM_GATEWAY_URL",
+            "LITELLM_API_BASE",
+        ),
     )
     gateway_key: SecretStr | None = Field(
         default=None,
-        validation_alias=AliasChoices("LLM_GATEWAY_API_KEY", "LITELLM_API_KEY"),
+        validation_alias=AliasChoices(
+            "LLM_GATEWAY_API_KEY",
+            "LLM_GATEWAY_KEY",
+            "LITELLM_API_KEY",
+        ),
     )
     gateway_model: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("LLM_GATEWAY_DEFAULT_MODEL", "LITELLM_MODEL"),
+        validation_alias=AliasChoices(
+            "LLM_GATEWAY_DEFAULT_MODEL",
+            "LLM_GATEWAY_MODEL",
+            "LITELLM_MODEL",
+        ),
     )
     embedding_model: str | None = Field(
         default=None,
         validation_alias=AliasChoices(
             "LLM_GATEWAY_DEFAULT_EMBEDDING_MODEL",
+            "LLM_GATEWAY_EMBEDDING_MODEL",
             "LITELLM_EMBEDDING_MODEL",
         ),
     )
@@ -104,6 +120,10 @@ class GatewayBaseSettings(BaseSettings):
     gateway_environment: str | None = Field(
         default=None,
         validation_alias="LLM_GATEWAY_ENVIRONMENT",
+    )
+    gateway_verify_ssl: bool = Field(
+        default=True,
+        validation_alias="LLM_GATEWAY_VERIFY_SSL",
     )
 
     model_config = SettingsConfigDict(
@@ -158,7 +178,7 @@ class GatewayBaseSettings(BaseSettings):
         default_model_fallback: str | None = None,
         default_embedding_model_fallback: str | None = None,
         default_headers: Mapping[str, str] | None = None,
-        verify_ssl: bool = True,
+        verify_ssl: bool | None = None,
     ) -> GatewaySettings:
         """Convert this Pydantic settings instance into an immutable :class:`GatewaySettings`."""
         base = _secret_value(self.gateway_base)
@@ -179,7 +199,7 @@ class GatewayBaseSettings(BaseSettings):
             app_name=self.gateway_app_name,
             environment=self.gateway_environment,
             default_headers=default_headers,
-            verify_ssl=verify_ssl,
+            verify_ssl=self.gateway_verify_ssl if verify_ssl is None else verify_ssl,
         )
 
     def create_gateway_client(
@@ -189,8 +209,8 @@ class GatewayBaseSettings(BaseSettings):
         max_retries: int | None = None,
         default_headers: Mapping[str, str] | None = None,
         http_client: httpx.Client | None = None,
-    ) -> OpenAI:
-        """Create a synchronous :class:`openai.OpenAI` client from these settings."""
+    ) -> GatewayClient:
+        """Create a synchronous :class:`GatewayClient` from these settings."""
         return self.to_gateway_settings().create_client(
             timeout=timeout,
             max_retries=max_retries,
@@ -205,8 +225,8 @@ class GatewayBaseSettings(BaseSettings):
         max_retries: int | None = None,
         default_headers: Mapping[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
-    ) -> AsyncOpenAI:
-        """Create an asynchronous :class:`openai.AsyncOpenAI` client from these settings."""
+    ) -> AsyncGatewayClient:
+        """Create an asynchronous :class:`AsyncGatewayClient` from these settings."""
         return self.to_gateway_settings().create_async_client(
             timeout=timeout,
             max_retries=max_retries,
@@ -229,4 +249,8 @@ def connection_options(
     key = _secret_value(settings.gateway_key)
     if not base or not key:
         raise MissingGatewayConfigError("LITELLM_API_BASE and LITELLM_API_KEY are required")
-    return {"api_base": base.rstrip("/"), "api_key": key}
+    validated_key = validate_api_key(
+        key,
+        disallow_master_key=os.environ.get(LEGACY_LITELLM_MASTER_KEY_ENV),
+    )
+    return {"api_base": base.rstrip("/"), "api_key": validated_key}

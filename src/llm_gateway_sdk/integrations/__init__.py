@@ -1,7 +1,7 @@
-"""Optional framework and ecosystem integrations for ``llm_gateway_sdk``.
+"""Optional configuration integrations for ``llm_gateway_sdk``.
 
-Each submodule is lazily imported so installing the base ``llm-gateway-sdk`` package
-never requires ``pydantic-settings``, ``instructor``, ``langchain-openai``, or ``traceloop-sdk``.
+Submodules are lazily imported so installing the core ``llm-gateway-sdk`` package
+never requires ``pydantic-settings``.
 """
 
 from __future__ import annotations

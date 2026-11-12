@@ -29,11 +29,11 @@ from llm_gateway_sdk import GatewaySettings
 settings = GatewaySettings.from_env()
 
 with settings.create_client() as client:
-    response = client.chat.completions.create(
+    response = client.complete(
         model="general-fast",
         messages=[{"role": "user", "content": "Hello"}],
     )
-    print(response.choices[0].message.content)
+    print(response.content)
 ```
 
 ## 4. Asynchronous Chat Completion
@@ -46,37 +46,33 @@ from llm_gateway_sdk import GatewaySettings
 async def main() -> None:
     settings = GatewaySettings.from_env()
     async with settings.create_async_client() as client:
-        response = await client.chat.completions.create(
+        response = await client.complete(
             model="general-fast",
             messages=[{"role": "user", "content": "Hello"}],
         )
-        print(response.choices[0].message.content)
+        print(response.content)
 
 
 asyncio.run(main())
 ```
 
-## 5. Streaming
+## 5. Real-Time SSE Streaming
 
 ```python
-stream = await client.chat.completions.create(
+async with await client.stream(
     model="general-fast",
     messages=[{"role": "user", "content": "Explain this."}],
-    stream=True,
-)
-
-async for chunk in stream:
-    if chunk.choices:
-        print(chunk.choices[0].delta.content or "", end="")
+) as stream:
+    async for delta in stream.iter_text():
+        print(delta, end="", flush=True)
 ```
 
-## 6. Embeddings
+## 6. Vector Embeddings
 
 ```python
-response = await client.embeddings.create(
+response = await client.embed(
     model="rag-embedding",
     input=["Example document"],
 )
-print(len(response.data[0].embedding))
+print(len(response.embedding))
 ```
-

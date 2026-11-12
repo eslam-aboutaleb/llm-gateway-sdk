@@ -2,7 +2,7 @@
 
 ## 1. Core Architectural Principle
 
-`llm-gateway-sdk` is a **thin, strongly-typed configuration and client-factory layer** around the official `openai` Python SDK (`OpenAI` and `AsyncOpenAI`), purpose-built for self-hosted LiteLLM Gateways.
+`llm-gateway-sdk` is a **100% provider-agnostic and framework-agnostic HTTP/SSE client and configuration SDK** built directly on `httpx` and `pydantic`, purpose-built for self-hosted LLM Gateways.
 
 ### Strict Layered Architecture (Unidirectional Dependency Graph)
 
@@ -10,26 +10,22 @@ To adhere to Clean Code and SOLID principles (Single Responsibility, Open/Closed
 
 ```text
 +------------------------------------------------------------------------+
-| Layer 4: Optional Ecosystem Adapters (llm_gateway_sdk.integrations.*)  |
+| Layer 4: Optional Configuration Adapters (llm_gateway_sdk.integrations)|
 |   - pydantic_settings.py  (GatewayBaseSettings, connection_options)    |
-|   - instructor.py         (create_instructor_client, async variant)    |
-|   - langchain.py          (create_chat_model, create_embeddings_model) |
-|   - openllmetry.py        (configure_observability)                    |
 +------------------------------------------------------------------------+
                                     |
                                     v
 +------------------------------------------------------------------------+
-| Layer 3: Client Factory Layer (llm_gateway_sdk.clients)                |
-|   - create_client()       -> openai.OpenAI                             |
-|   - create_async_client() -> openai.AsyncOpenAI                        |
-|   - _resolve_client_options() (shared DRY parameter resolution)        |
+| Layer 3: Gateway HTTP/SSE Clients (llm_gateway_sdk.clients)            |
+|   - GatewayClient / AsyncGatewayClient                                 |
+|   - create_client() / create_async_client()                            |
 +------------------------------------------------------------------------+
                                     |
                                     v
 +------------------------------------------------------------------------+
-| Layer 2: Configuration Model & Env Resolution (llm_gateway_sdk.settings)|
+| Layer 2: Configuration & Response Models (settings.py, models.py)      |
 |   - GatewaySettings (frozen dataclass, secret redaction, headers)      |
-|   - _EnvironmentLookup (single-responsibility env variable resolver)   |
+|   - ChatResponse, EmbeddingResponse, ModelListResponse, GatewayStream  |
 +------------------------------------------------------------------------+
                                     |
                                     v
@@ -43,7 +39,7 @@ To adhere to Clean Code and SOLID principles (Single Responsibility, Open/Closed
 +------------------------------------------------------------------------+
 | Layer 0: Domain Primitives (constants.py, exceptions.py)               |
 |   - Immutable constants, header names, security blocklists             |
-|   - GatewaySDKError -> GatewayConfigError hierarchy                    |
+|   - GatewaySDKError -> GatewayConfigError / GatewayRuntimeError        |
 +------------------------------------------------------------------------+
 ```
 
@@ -51,14 +47,14 @@ To adhere to Clean Code and SOLID principles (Single Responsibility, Open/Closed
 
 1. **Single Responsibility Principle (SRP):**
    - `constants.py` owns domain constants and defaults (no magic numbers or strings in logic).
-   - `exceptions.py` owns the configuration exception hierarchy.
+   - `exceptions.py` owns the configuration and runtime exception hierarchies.
    - `validation.py` owns stateless input validation and security boundary enforcement.
    - `settings.py` owns the immutable `GatewaySettings` value object and `_EnvironmentLookup`.
-   - `clients.py` owns `OpenAI` and `AsyncOpenAI` instantiation.
-   - `integrations/*` each own a single optional third-party framework adapter.
+   - `models.py` owns Pydantic v2 response models and SSE stream iterators (`GatewayStream`, `AsyncGatewayStream`).
+   - `clients.py` owns synchronous and asynchronous `httpx` request execution (`GatewayClient`, `AsyncGatewayClient`).
+   - `integrations/pydantic_settings.py` owns the optional `pydantic-settings` adapter.
 2. **Don't Repeat Yourself (DRY):**
-   - `_resolve_client_options()` in `clients.py` centralizes option resolution between synchronous and asynchronous OpenAI clients.
-   - `_build_common_langchain_kwargs()` in `integrations/langchain.py` centralizes option resolution between `ChatOpenAI` and `OpenAIEmbeddings`.
+   - `_resolve_client_options()`, `_prepare_chat_payload()`, `_prepare_embeddings_payload()`, and `_wrap_raw_response()` in `clients.py` centralize request/response preparation between synchronous and asynchronous clients.
    - `_parse_int_setting()` in `validation.py` centralizes integer parsing for `max_retries` and `embedding_dimensions`.
 3. **Fail-Closed Security & Redaction:**
-   - Every layer treats `api_key` as sensitive data that must never appear in `repr()`, `str()`, `to_dict()`, validation exceptions, or telemetry attributes.
+   - Every layer treats `api_key` as sensitive data that must never appear in `repr()`, `str()`, `to_dict()`, validation exceptions, or gateway HTTP status errors.

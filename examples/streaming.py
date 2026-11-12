@@ -11,8 +11,9 @@ async def main() -> None:
     settings = GatewaySettings.from_env()
     model = settings.default_model or "general-fast"
 
-    async with settings.create_async_client() as client:
-        stream = await client.chat.completions.create(
+    async with (
+        settings.create_async_client() as client,
+        await client.stream(
             model=model,
             messages=[
                 {
@@ -20,11 +21,10 @@ async def main() -> None:
                     "content": "Explain why centralized LLM routing simplifies operations.",
                 }
             ],
-            stream=True,
-        )
-        async for chunk in stream:
-            if chunk.choices:
-                print(chunk.choices[0].delta.content or "", end="", flush=True)
+        ) as stream,
+    ):
+        async for delta_text in stream.iter_text():
+            print(delta_text, end="", flush=True)
         print()
 
 

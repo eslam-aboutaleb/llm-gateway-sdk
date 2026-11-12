@@ -1,6 +1,6 @@
 """FastAPI lifespan client management example using ``llm_gateway_sdk``.
 
-Demonstrates creating a single shared ``AsyncOpenAI`` client at application startup
+Demonstrates creating a single shared ``AsyncGatewayClient`` at application startup
 and closing it cleanly on shutdown rather than instantiating a client per request.
 """
 
@@ -15,7 +15,7 @@ from llm_gateway_sdk import GatewaySettings
 
 @asynccontextmanager
 async def gateway_lifespan(app: Any) -> AsyncIterator[None]:
-    """Attach a shared ``AsyncOpenAI`` gateway client to ``app.state``."""
+    """Attach a shared ``AsyncGatewayClient`` to ``app.state``."""
     settings = GatewaySettings.from_env()
     async with settings.create_async_client() as async_client:
         app.state.gateway_settings = settings

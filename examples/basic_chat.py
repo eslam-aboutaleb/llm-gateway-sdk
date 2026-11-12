@@ -1,4 +1,4 @@
-"""Synchronous chat completion example using ``llm_gateway_sdk``."""
+"""Synchronous chat completion and model discovery example using ``llm_gateway_sdk``."""
 
 from __future__ import annotations
 
@@ -10,14 +10,17 @@ def main() -> None:
     model = settings.default_model or "general-fast"
 
     with settings.create_client() as client:
-        response = client.chat.completions.create(
+        models = client.list_models()
+        print("Available gateway aliases:", models.model_ids)
+
+        response = client.complete(
             model=model,
             messages=[
                 {"role": "system", "content": "You are a concise assistant."},
                 {"role": "user", "content": "Hello from llm-gateway-sdk!"},
             ],
         )
-        print(response.choices[0].message.content)
+        print(response.content)
 
 
 if __name__ == "__main__":

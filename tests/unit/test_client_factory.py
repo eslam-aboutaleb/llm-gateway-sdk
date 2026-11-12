@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from openai import AsyncOpenAI, OpenAI
 
 from llm_gateway_sdk import (
+    AsyncGatewayClient,
+    GatewayClient,
     GatewaySettings,
     InvalidGatewaySettingsError,
     create_async_client,
@@ -14,14 +15,14 @@ from llm_gateway_sdk import (
 )
 
 
-def test_create_sync_and_async_clients_return_native_openai_instances(
+def test_create_sync_and_async_clients_return_gateway_instances(
     default_settings: GatewaySettings,
 ) -> None:
     sync_client = default_settings.create_client()
     async_client = default_settings.create_async_client()
     try:
-        assert isinstance(sync_client, OpenAI)
-        assert isinstance(async_client, AsyncOpenAI)
+        assert isinstance(sync_client, GatewayClient)
+        assert isinstance(async_client, AsyncGatewayClient)
         assert str(sync_client.base_url).rstrip("/") == "https://gateway.example.com/v1"
         assert str(async_client.base_url).rstrip("/") == "https://gateway.example.com/v1"
         assert sync_client.api_key == default_settings.api_key
@@ -32,6 +33,10 @@ def test_create_sync_and_async_clients_return_native_openai_instances(
         assert async_client.timeout == 15.0
         assert sync_client.default_headers["X-Gateway-App-Name"] == "test-consumer"
         assert sync_client.default_headers["X-Gateway-Environment"] == "test"
+        assert default_settings.api_key not in repr(sync_client)
+        assert default_settings.api_key not in repr(async_client)
+        assert "[REDACTED]" in repr(sync_client)
+        assert "[REDACTED]" in repr(async_client)
     finally:
         sync_client.close()
 
@@ -65,8 +70,8 @@ def test_verify_ssl_false_creates_unverified_transport() -> None:
     sync_client = settings.create_client()
     async_client = settings.create_async_client()
     try:
-        assert isinstance(sync_client, OpenAI)
-        assert isinstance(async_client, AsyncOpenAI)
+        assert isinstance(sync_client, GatewayClient)
+        assert isinstance(async_client, AsyncGatewayClient)
     finally:
         sync_client.close()
 

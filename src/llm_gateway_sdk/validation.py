@@ -275,7 +275,7 @@ def _validate_single_header(raw_key: Any, raw_val: Any) -> tuple[str, str]:
         raise InvalidGatewaySettingsError(
             f"Gateway 'default_headers' must not override reserved header '{key}'"
         )
-    if _has_whitespace_or_control_chars(key):
+    if _has_whitespace_or_control_chars(key) or ":" in key:
         raise InvalidGatewaySettingsError(
             "Gateway 'default_headers' contains an invalid header name"
         )
@@ -317,6 +317,17 @@ def parse_bool_env(value: str, *, var_name: str) -> bool:
     )
 
 
+def _effective_port(parsed: SplitResult) -> int | None:
+    """Return explicit port or standard scheme default port (80 for http, 443 for https)."""
+    if parsed.port is not None:
+        return parsed.port
+    if parsed.scheme == "http":
+        return 80
+    if parsed.scheme == "https":
+        return 443
+    return None
+
+
 def validate_http_client_origin(
     http_client: httpx.Client | httpx.AsyncClient,
     expected_base_url: str,
@@ -326,6 +337,10 @@ def validate_http_client_origin(
         raise InvalidGatewaySettingsError(
             "Custom http_client must not enable follow_redirects=True "
             "to prevent credential leakage across origins"
+        )
+    if getattr(http_client, "auth", None) is not None:
+        raise InvalidGatewaySettingsError(
+            "Custom http_client must not configure custom auth that overrides gateway credentials"
         )
 
     client_base = str(http_client.base_url)
@@ -338,7 +353,7 @@ def validate_http_client_origin(
     if (
         parsed_client.scheme != parsed_expected.scheme
         or parsed_client.hostname != parsed_expected.hostname
-        or parsed_client.port != parsed_expected.port
+        or _effective_port(parsed_client) != _effective_port(parsed_expected)
     ):
         raise InvalidGatewaySettingsError(
             "Custom http_client base_url origin does not match configured gateway base_url"

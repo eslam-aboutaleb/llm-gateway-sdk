@@ -12,16 +12,16 @@ async def main() -> None:
     model = settings.default_model or "general-fast"
 
     async with settings.create_async_client() as client:
-        response = await client.chat.completions.create(
+        response = await client.complete(
             model=model,
             messages=[
                 {
                     "role": "user",
-                    "content": "Summarize the benefits of an API gateway in one sentence.",
+                    "content": "Summarize the benefits of an LLM gateway in one sentence.",
                 }
             ],
         )
-        print(response.choices[0].message.content)
+        print(response.content)
 
 
 if __name__ == "__main__":

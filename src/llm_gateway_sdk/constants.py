@@ -16,7 +16,6 @@ __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
     "DEFAULT_VERIFY_SSL",
     "FORBIDDEN_HEADER_NAMES",
-    "FORBIDDEN_TELEMETRY_KEYS",
     "LEGACY_LITELLM_MASTER_KEY_ENV",
     "REDACTED_SECRET",
 ]
@@ -54,21 +53,5 @@ FORBIDDEN_HEADER_NAMES: frozenset[str] = frozenset(
         "proxy-authorization",
         "host",
         "content-length",
-    }
-)
-
-#: Attribute keys forbidden in observability/telemetry resource attributes.
-FORBIDDEN_TELEMETRY_KEYS: frozenset[str] = frozenset(
-    {
-        "api_key",
-        "apikey",
-        "authorization",
-        "litellm_api_key",
-        "litellm_master_key",
-        "llm_gateway_api_key",
-        "openai_api_key",
-        "password",
-        "secret",
-        "token",
     }
 )

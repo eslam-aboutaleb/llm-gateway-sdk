@@ -1,4 +1,4 @@
-"""Integration tests for synchronous chat completions against mocked LiteLLM Gateway."""
+"""Integration tests for synchronous chat completions against mocked LLM Gateway."""
 
 from __future__ import annotations
 
@@ -7,15 +7,16 @@ from typing import Any
 
 import httpx
 import pytest
-from openai import (
-    AuthenticationError,
-    BadRequestError,
-    InternalServerError,
-    PermissionDeniedError,
-    RateLimitError,
-)
 
-from llm_gateway_sdk import GatewaySettings
+from llm_gateway_sdk import (
+    GatewayAuthenticationError,
+    GatewayBadRequestError,
+    GatewayInternalServerError,
+    GatewayPermissionDeniedError,
+    GatewayRateLimitError,
+    GatewaySettings,
+    MissingGatewayConfigError,
+)
 
 
 @pytest.mark.parametrize(
@@ -51,7 +52,7 @@ def test_chat_completion_with_gateway_model_aliases(
         )
 
     with mock_sync_client_factory(handler) as client:
-        response = client.chat.completions.create(
+        response = client.complete(
             model=alias,
             messages=[{"role": "user", "content": "Hello gateway"}],
         )
@@ -61,20 +62,60 @@ def test_chat_completion_with_gateway_model_aliases(
     assert str(req.url) == "https://gateway.example.com/v1/chat/completions"
     assert req.headers["Authorization"] == f"Bearer {default_settings.api_key}"
     assert req.headers["X-Gateway-App-Name"] == "test-consumer"
+    assert response.content == f"Reply from {alias}"
     assert response.choices[0].message.content == f"Reply from {alias}"
+    assert response.request_id == f"req-{alias}"
     assert response._request_id == f"req-{alias}"
+
+
+def test_complete_uses_default_model_and_raises_if_missing(
+    mock_sync_client_factory: Any,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-default",
+                "object": "chat.completion",
+                "created": 1700000000,
+                "model": body["model"],
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "Default model used"},
+                    }
+                ],
+            },
+        )
+
+    with mock_sync_client_factory(handler) as client:
+        resp = client.complete(messages=[{"role": "user", "content": "Hi"}])
+        assert resp.model == "general-fast"
+        assert resp.content == "Default model used"
+
+    no_model_settings = GatewaySettings(
+        base_url="https://gateway.example.com/v1",
+        api_key="sk-test",
+    )
+    with (
+        mock_sync_client_factory(handler, no_model_settings) as client2,
+        pytest.raises(MissingGatewayConfigError),
+    ):
+        client2.complete(messages=[{"role": "user", "content": "Hi"}])
 
 
 @pytest.mark.parametrize(
     ("status_code", "expected_exc"),
     [
-        (400, BadRequestError),
-        (401, AuthenticationError),
-        (403, PermissionDeniedError),
-        (429, RateLimitError),
-        (500, InternalServerError),
-        (502, InternalServerError),
-        (503, InternalServerError),
+        (400, GatewayBadRequestError),
+        (401, GatewayAuthenticationError),
+        (403, GatewayPermissionDeniedError),
+        (429, GatewayRateLimitError),
+        (500, GatewayInternalServerError),
+        (502, GatewayInternalServerError),
+        (503, GatewayInternalServerError),
     ],
 )
 def test_chat_errors_propagate_without_automatic_retry_by_default(

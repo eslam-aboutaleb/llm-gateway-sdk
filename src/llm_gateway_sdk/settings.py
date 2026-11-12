@@ -38,7 +38,7 @@ from llm_gateway_sdk.validation import (
 )
 
 if TYPE_CHECKING:
-    from openai import AsyncOpenAI, OpenAI
+    from llm_gateway_sdk.clients import AsyncGatewayClient, GatewayClient
 
 __all__ = ["REDACTED_SECRET", "GatewaySettings"]
 
@@ -57,11 +57,17 @@ class _EnvironmentLookup:
         self._prefix = prefix
         self._allow_legacy = allow_legacy_litellm_env
 
-    def get(self, suffix: str, *legacy_names: str) -> str | None:
-        """Read ``{prefix}{suffix}``, falling back to ``legacy_names`` only if opted in."""
-        primary_val = self._env.get(f"{self._prefix}{suffix}")
-        if primary_val is not None and primary_val.strip() != "":
-            return primary_val
+    def get(
+        self,
+        suffix: str,
+        *legacy_names: str,
+        primary_aliases: tuple[str, ...] = (),
+    ) -> str | None:
+        """Read ``{prefix}{suffix}`` (or ``{prefix}{alias}``), falling back to ``legacy_names``."""
+        for candidate_suffix in (suffix, *primary_aliases):
+            primary_val = self._env.get(f"{self._prefix}{candidate_suffix}")
+            if primary_val is not None and primary_val.strip() != "":
+                return primary_val
         if self._allow_legacy:
             for legacy_name in legacy_names:
                 legacy_val = self._env.get(legacy_name)
@@ -69,11 +75,18 @@ class _EnvironmentLookup:
                     return legacy_val
         return None
 
-    def require(self, suffix: str, legacy_name: str, override_val: Any) -> str:
+    def require(
+        self,
+        suffix: str,
+        legacy_name: str,
+        override_val: Any,
+        *,
+        primary_aliases: tuple[str, ...] = (),
+    ) -> Any:
         """Resolve a required setting from override or environment, raising if absent."""
         if override_val is not None:
-            return str(override_val) if not isinstance(override_val, str) else override_val
-        resolved = self.get(suffix, legacy_name)
+            return override_val
+        resolved = self.get(suffix, legacy_name, primary_aliases=primary_aliases)
         if resolved is None:
             legacy_hint = f" or '{legacy_name}'" if self._allow_legacy else ""
             raise MissingGatewayConfigError(
@@ -119,7 +132,14 @@ class GatewaySettings:
         object.__setattr__(
             self, "base_url", validate_base_url(self.base_url, field_name="base_url")
         )
-        object.__setattr__(self, "api_key", validate_api_key(self.api_key))
+        object.__setattr__(
+            self,
+            "api_key",
+            validate_api_key(
+                self.api_key,
+                disallow_master_key=os.environ.get(LEGACY_LITELLM_MASTER_KEY_ENV),
+            ),
+        )
         object.__setattr__(
             self,
             "default_model",
@@ -208,9 +228,9 @@ class GatewaySettings:
         if self.environment:
             merged[ATTRIBUTION_ENV_HEADER] = self.environment
         if self.default_headers:
-            merged.update(self.default_headers)
+            _merge_headers_case_insensitive(merged, self.default_headers)
         if extra_headers is not None:
-            merged.update(validate_default_headers(extra_headers))
+            _merge_headers_case_insensitive(merged, validate_default_headers(extra_headers))
         return merged
 
     @classmethod
@@ -228,17 +248,34 @@ class GatewaySettings:
             env, prefix=prefix, allow_legacy_litellm_env=allow_legacy_litellm_env
         )
 
-        base_url = lookup.require("BASE_URL", "LITELLM_API_BASE", overrides.pop("base_url", None))
-        raw_api_key = lookup.require("API_KEY", "LITELLM_API_KEY", overrides.pop("api_key", None))
+        base_url = lookup.require(
+            "BASE_URL",
+            "LITELLM_API_BASE",
+            overrides.pop("base_url", None),
+            primary_aliases=("URL",),
+        )
+        raw_api_key = lookup.require(
+            "API_KEY",
+            "LITELLM_API_KEY",
+            overrides.pop("api_key", None),
+            primary_aliases=("KEY",),
+        )
         validated_key = validate_api_key(
             raw_api_key,
             disallow_master_key=env.get(LEGACY_LITELLM_MASTER_KEY_ENV),
         )
 
-        default_model = overrides.pop("default_model", lookup.get("DEFAULT_MODEL", "LITELLM_MODEL"))
+        default_model = overrides.pop(
+            "default_model",
+            lookup.get("DEFAULT_MODEL", "LITELLM_MODEL", primary_aliases=("MODEL",)),
+        )
         default_embedding_model = overrides.pop(
             "default_embedding_model",
-            lookup.get("DEFAULT_EMBEDDING_MODEL", "LITELLM_EMBEDDING_MODEL"),
+            lookup.get(
+                "DEFAULT_EMBEDDING_MODEL",
+                "LITELLM_EMBEDDING_MODEL",
+                primary_aliases=("EMBEDDING_MODEL",),
+            ),
         )
         embedding_dimensions = overrides.pop(
             "embedding_dimensions",
@@ -249,26 +286,32 @@ class GatewaySettings:
             ),
         )
 
-        raw_timeout = overrides.pop("timeout", env.get(f"{prefix}TIMEOUT"))
-        timeout: float | httpx.Timeout = (
-            DEFAULT_TIMEOUT_SECONDS
-            if raw_timeout is None or raw_timeout == ""
-            else validate_timeout(raw_timeout)
-        )
+        if "timeout" in overrides:
+            timeout = validate_timeout(overrides.pop("timeout"))
+        else:
+            env_timeout = lookup.get("TIMEOUT")
+            timeout = (
+                DEFAULT_TIMEOUT_SECONDS if env_timeout is None else validate_timeout(env_timeout)
+            )
 
-        raw_retries = overrides.pop("max_retries", env.get(f"{prefix}MAX_RETRIES"))
-        max_retries: int = (
-            DEFAULT_MAX_RETRIES
-            if raw_retries is None or raw_retries == ""
-            else validate_max_retries(raw_retries)
-        )
+        if "max_retries" in overrides:
+            max_retries = validate_max_retries(overrides.pop("max_retries"))
+        else:
+            env_retries = lookup.get("MAX_RETRIES")
+            max_retries = (
+                DEFAULT_MAX_RETRIES if env_retries is None else validate_max_retries(env_retries)
+            )
 
         app_name = overrides.pop("app_name", lookup.get("APP_NAME"))
         environment = overrides.pop("environment", lookup.get("ENVIRONMENT"))
         default_headers = overrides.pop("default_headers", None)
 
-        raw_verify_ssl = overrides.pop("verify_ssl", env.get(f"{prefix}VERIFY_SSL"))
-        verify_ssl = _resolve_verify_ssl(raw_verify_ssl, var_name=f"{prefix}VERIFY_SSL")
+        if "verify_ssl" in overrides:
+            verify_ssl = validate_verify_ssl(overrides.pop("verify_ssl"))
+        else:
+            verify_ssl = _resolve_verify_ssl(
+                lookup.get("VERIFY_SSL"), var_name=f"{prefix}VERIFY_SSL"
+            )
 
         if overrides:
             unknown = ", ".join(sorted(overrides))
@@ -295,8 +338,8 @@ class GatewaySettings:
         max_retries: int | None = None,
         default_headers: Mapping[str, str] | None = None,
         http_client: httpx.Client | None = None,
-    ) -> OpenAI:
-        """Create a synchronous native :class:`openai.OpenAI` client configured for the gateway."""
+    ) -> GatewayClient:
+        """Create a synchronous :class:`GatewayClient` configured for the gateway."""
         from llm_gateway_sdk.clients import create_client
 
         return create_client(
@@ -314,8 +357,8 @@ class GatewaySettings:
         max_retries: int | None = None,
         default_headers: Mapping[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
-    ) -> AsyncOpenAI:
-        """Create an asynchronous native :class:`openai.AsyncOpenAI` client for the gateway."""
+    ) -> AsyncGatewayClient:
+        """Create an asynchronous :class:`AsyncGatewayClient` configured for the gateway."""
         from llm_gateway_sdk.clients import create_async_client
 
         return create_async_client(
@@ -327,10 +370,22 @@ class GatewaySettings:
         )
 
 
-def _resolve_verify_ssl(raw_value: Any, *, var_name: str) -> bool:
-    """Resolve optional ``verify_ssl`` from environment or boolean override."""
-    if raw_value is None or raw_value == "":
+def _merge_headers_case_insensitive(
+    target: dict[str, str],
+    incoming: Mapping[str, str],
+) -> None:
+    """Merge ``incoming`` headers into ``target``, replacing keys case-insensitively."""
+    existing_lower = {k.lower(): k for k in target}
+    for key, value in incoming.items():
+        lowered = key.lower()
+        if lowered in existing_lower:
+            del target[existing_lower[lowered]]
+        target[key] = value
+        existing_lower[lowered] = key
+
+
+def _resolve_verify_ssl(raw_value: str | None, *, var_name: str) -> bool:
+    """Resolve optional ``verify_ssl`` from environment string."""
+    if raw_value is None:
         return DEFAULT_VERIFY_SSL
-    if isinstance(raw_value, str):
-        return parse_bool_env(raw_value, var_name=var_name)
-    return validate_verify_ssl(raw_value)
+    return parse_bool_env(raw_value, var_name=var_name)

@@ -1,4 +1,4 @@
-"""Compatibility tests against the deployed LiteLLM Gateway contract and opt-in live tests."""
+"""Compatibility tests against the deployed LLM Gateway contract and opt-in live tests."""
 
 from __future__ import annotations
 
@@ -7,20 +7,21 @@ from typing import Any
 
 import httpx
 import pytest
-from openai import NotFoundError
 
-from llm_gateway_sdk import GatewaySettings
+from llm_gateway_sdk import GatewayNotFoundError, GatewaySettings
 
 
-def test_models_endpoint_and_caddy_blocked_management_routes(
+def test_models_endpoint_health_and_caddy_blocked_management_routes(
     mock_sync_client_factory: Any,
 ) -> None:
-    """Verify `/v1/models` works while administrative routes return 404 NotFoundError."""
-    allowed_paths = {"/v1/chat/completions", "/v1/embeddings", "/v1/models"}
+    """Verify `/v1/models` and `/health` work while administrative routes return 404."""
+    allowed_paths = {"/v1/chat/completions", "/v1/embeddings", "/v1/models", "/health"}
 
     def caddy_gateway_simulator(request: httpx.Request) -> httpx.Response:
         if request.url.path not in allowed_paths:
             return httpx.Response(404, text="Not Found")
+        if request.url.path == "/health":
+            return httpx.Response(200, text='"I\'m alive!"')
         if request.url.path == "/v1/models":
             return httpx.Response(
                 200,
@@ -63,6 +64,7 @@ def test_models_endpoint_and_caddy_blocked_management_routes(
         return httpx.Response(200, json={})
 
     with mock_sync_client_factory(caddy_gateway_simulator) as client:
+        assert client.health() is True
         models_page = client.models.list()
         model_ids = [m.id for m in models_page.data]
         assert model_ids == [
@@ -75,7 +77,7 @@ def test_models_endpoint_and_caddy_blocked_management_routes(
 
         # Management routes are blocked at Caddy ingress with 404
         for blocked_route in ["/key/generate", "/user/info", "/team/info", "/spend/logs"]:
-            with pytest.raises(NotFoundError):
+            with pytest.raises(GatewayNotFoundError):
                 client.post(blocked_route, cast_to=dict)
 
 
@@ -85,39 +87,39 @@ def test_models_endpoint_and_caddy_blocked_management_routes(
     reason="Opt-in live gateway test; set LLM_GATEWAY_LIVE_TESTS=true to run",
 )
 def test_live_gateway_integration() -> None:
-    """Opt-in live integration test against a deployed LiteLLM Gateway."""
+    """Opt-in live integration test against the deployed LLM Gateway."""
     import asyncio
     import json
-
-    from llm_gateway_sdk.integrations.langchain import create_chat_model, create_embeddings_model
 
     settings = GatewaySettings.from_env(allow_legacy_litellm_env=True)
     chat_model = settings.default_model or "general-fast"
     embed_model = settings.default_embedding_model or "rag-embedding"
 
     with settings.create_client() as client:
-        models_page = client.models.list()
+        health_status = client.health()
+        assert health_status
+
+        models_page = client.list_models()
         model_ids = {m.id for m in models_page.data}
         assert "general-fast" in model_ids
         assert "rag-embedding" in model_ids
 
-        completion = client.chat.completions.create(
+        completion = client.complete(
             model=chat_model,
             messages=[{"role": "user", "content": "Reply with OK."}],
             max_tokens=16,
         )
-        assert completion.choices[0].message.content
+        assert completion.content
 
-        stream = client.chat.completions.create(
+        with client.stream(
             model=chat_model,
             messages=[{"role": "user", "content": "Reply with OK."}],
             max_tokens=16,
-            stream=True,
-        )
-        chunks = [c.choices[0].delta.content or "" for c in stream if c.choices]
-        assert "".join(chunks).strip()
+        ) as stream:
+            chunks = list(stream.iter_text())
+            assert "".join(chunks).strip()
 
-        tool_resp = client.chat.completions.create(
+        tool_resp = client.complete(
             model="agent-tools",
             messages=[{"role": "user", "content": "Call echo_tool with text OK."}],
             tools=[
@@ -138,10 +140,13 @@ def test_live_gateway_integration() -> None:
             max_tokens=64,
         )
         tool_calls = tool_resp.choices[0].message.tool_calls
-        assert tool_calls and tool_calls[0].function.name == "echo_tool"
-        assert json.loads(tool_calls[0].function.arguments)["text"]
+        assert tool_calls
+        first_call = tool_calls[0]
+        assert first_call.type == "function"
+        assert first_call.function.name == "echo_tool"
+        assert json.loads(first_call.function.arguments)["text"]
 
-        embedding = client.embeddings.create(
+        embedding = client.embed(
             model=embed_model,
             input=["Synthetic live embedding test"],
         )
@@ -150,17 +155,25 @@ def test_live_gateway_integration() -> None:
 
     async def verify_async() -> None:
         async with settings.create_async_client() as aclient:
-            aresp = await aclient.chat.completions.create(
+            aresp = await aclient.complete(
                 model=chat_model,
                 messages=[{"role": "user", "content": "Reply with OK."}],
                 max_tokens=16,
             )
-            assert aresp.choices[0].message.content
+            assert aresp.content
+
+            async with await aclient.stream(
+                model=chat_model,
+                messages=[{"role": "user", "content": "Reply with OK."}],
+                max_tokens=16,
+            ) as astream:
+                achunks = [piece async for piece in astream.iter_text()]
+                assert "".join(achunks).strip()
+
+            aemb = await aclient.embed(
+                model=embed_model,
+                input="Async embedding test",
+            )
+            assert len(aemb.embeddings[0]) > 0
 
     asyncio.run(verify_async())
-
-    lc_chat = create_chat_model(settings, model=chat_model, max_tokens=24, temperature=0.0)
-    assert lc_chat.invoke("Reply with OK.").content
-
-    lc_emb = create_embeddings_model(settings, model=embed_model)
-    assert len(lc_emb.embed_query("Synthetic check.")) > 0

@@ -74,12 +74,14 @@ def test_build_default_headers_attribution_and_merging() -> None:
         environment="production",
         default_headers={"X-Correlation-ID": "req-123"},
     )
-    headers = settings.build_default_headers(extra_headers={"X-Extra": "true"})
+    headers = settings.build_default_headers(
+        extra_headers={"X-Extra": "true", "x-correlation-id": "req-456"}
+    )
     assert headers == {
         "X-Gateway-App-Name": "polymarket-ai-trading",
         "X-Title": "polymarket-ai-trading",
         "X-Gateway-Environment": "production",
-        "X-Correlation-ID": "req-123",
+        "x-correlation-id": "req-456",
         "X-Extra": "true",
     }
 
@@ -173,10 +175,48 @@ def test_from_env_overrides_and_unknown_kwargs() -> None:
     settings = GatewaySettings.from_env(
         environ=env,
         timeout=custom_timeout,
+        max_retries=2,
+        verify_ssl=False,
         default_headers={"X-Service": "test"},
     )
     assert settings.timeout == custom_timeout
+    assert settings.max_retries == 2
+    assert settings.verify_ssl is False
     assert settings.default_headers == {"X-Service": "test"}
+
+    with pytest.raises(InvalidGatewaySettingsError):
+        GatewaySettings.from_env(
+            environ={"LLM_GATEWAY_BASE_URL": "https://gateway.example.com/v1"},
+            api_key=12345,
+        )
 
     with pytest.raises(TypeError, match="Unexpected keyword arguments"):
         GatewaySettings.from_env(environ=env, unknown_option=True)
+
+
+def test_from_env_whitespace_only_optional_vars_use_defaults() -> None:
+    env = {
+        "LLM_GATEWAY_BASE_URL": "https://gateway.example.com/v1",
+        "LLM_GATEWAY_API_KEY": "sk-env-key",
+        "LLM_GATEWAY_TIMEOUT": "   ",
+        "LLM_GATEWAY_MAX_RETRIES": "   ",
+        "LLM_GATEWAY_VERIFY_SSL": "   ",
+    }
+    settings = GatewaySettings.from_env(environ=env)
+    assert settings.timeout == 30.0
+    assert settings.max_retries == 0
+    assert settings.verify_ssl is True
+
+
+def test_from_env_supports_llm_gateway_url_and_key_aliases() -> None:
+    env = {
+        "LLM_GATEWAY_URL": "https://gateway.example.com/v1",
+        "LLM_GATEWAY_KEY": "sk-short-env-key",
+        "LLM_GATEWAY_MODEL": "general-fast",
+        "LLM_GATEWAY_EMBEDDING_MODEL": "rag-embedding",
+    }
+    settings = GatewaySettings.from_env(environ=env)
+    assert settings.base_url == "https://gateway.example.com/v1"
+    assert settings.api_key == "sk-short-env-key"
+    assert settings.default_model == "general-fast"
+    assert settings.default_embedding_model == "rag-embedding"

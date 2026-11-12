@@ -7,9 +7,12 @@ from typing import Any
 
 import httpx
 import pytest
-from openai import BadRequestError
 
-from llm_gateway_sdk import GatewaySettings
+from llm_gateway_sdk import (
+    GatewayBadRequestError,
+    GatewaySettings,
+    MissingGatewayConfigError,
+)
 
 
 def test_single_and_batch_embeddings_with_dimensions(
@@ -43,13 +46,12 @@ def test_single_and_batch_embeddings_with_dimensions(
         )
 
     with mock_sync_client_factory(handler) as client:
-        single = client.embeddings.create(
-            model=default_settings.default_embedding_model or "rag-embedding",
-            input="Polymarket rate decision market",
-            dimensions=default_settings.embedding_dimensions or 1536,
-        )
+        # High-level client.embed() uses default_embedding_model and embedding_dimensions
+        single = client.embed(input="Polymarket rate decision market")
         assert len(single.data) == 1
         assert len(single.data[0].embedding) == 1536
+        assert len(single.embeddings) == 1
+        assert single.request_id == "emb-req-1"
 
         batch = client.embeddings.create(
             model="rag-embedding",
@@ -65,7 +67,7 @@ def test_single_and_batch_embeddings_with_dimensions(
     assert captured_payloads[1]["dimensions"] == 256
 
 
-def test_invalid_embedding_model_raises_bad_request(
+def test_embed_missing_model_and_bad_request_error(
     mock_sync_client_factory: Any,
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
@@ -75,6 +77,19 @@ def test_invalid_embedding_model_raises_bad_request(
             json={"error": {"message": "Model 'unknown-embed' not allowed for key"}},
         )
 
-    with mock_sync_client_factory(handler) as client, pytest.raises(BadRequestError) as exc_info:
+    with (
+        mock_sync_client_factory(handler) as client,
+        pytest.raises(GatewayBadRequestError) as exc_info,
+    ):
         client.embeddings.create(model="unknown-embed", input="test")
     assert exc_info.value.request_id == "emb-400"
+
+    no_model_settings = GatewaySettings(
+        base_url="https://gateway.example.com/v1",
+        api_key="sk-test",
+    )
+    with (
+        mock_sync_client_factory(handler, no_model_settings) as client2,
+        pytest.raises(MissingGatewayConfigError),
+    ):
+        client2.embed(input="test")

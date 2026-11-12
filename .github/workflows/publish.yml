@@ -31,8 +31,22 @@ jobs:
       - name: Run full verification suite
         run: |
           uv run --frozen ruff check .
-          uv run --frozen mypy src/llm_gateway_sdk
+          uv run --frozen mypy
           uv run --frozen pytest
+      - name: Verify version consistency
+        run: |
+          uv run --frozen python - <<'PY'
+          import os, tomllib, pathlib
+          import llm_gateway_sdk
+          pyproject_ver = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
+          assert llm_gateway_sdk.__version__ == pyproject_ver, (
+              f"__version__ ({llm_gateway_sdk.__version__}) != pyproject.toml ({pyproject_ver})"
+          )
+          ref_name = os.environ.get("GITHUB_REF_NAME", "")
+          if ref_name.startswith("v"):
+              assert ref_name == f"v{pyproject_ver}", f"Tag {ref_name} != v{pyproject_ver}"
+          print(f"Verified version {pyproject_ver}")
+          PY
       - name: Build wheel and sdist
         run: uv build
       - name: Validate distributions with Twine

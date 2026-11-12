@@ -17,6 +17,7 @@ from llm_gateway_sdk.validation import (
     validate_base_url,
     validate_default_headers,
     validate_embedding_dimensions,
+    validate_http_client_origin,
     validate_max_retries,
     validate_optional_str,
     validate_timeout,
@@ -207,6 +208,8 @@ def test_validate_optional_str() -> None:
         {"Authorization": "Bearer other"},
         {"authorization": "Bearer other"},
         {"Host": "evil.example.com"},
+        {":authority": "evil.example.com"},
+        {"X-Bad:Name": "val"},
         {"X-Bad Name": "val"},
         {"X-Bad\nName": "val"},
         {"X-Good": "bad\r\nvalue"},
@@ -229,3 +232,17 @@ def test_validate_verify_ssl_and_parse_bool_env() -> None:
     assert parse_bool_env("0", var_name="TEST") is False
     with pytest.raises(InvalidGatewaySettingsError):
         parse_bool_env("maybe", var_name="TEST")
+
+
+def test_validate_http_client_origin_default_ports_and_auth() -> None:
+    with httpx.Client(base_url="https://gateway.example.com/v1") as https_client:
+        validate_http_client_origin(https_client, "https://gateway.example.com:443/v1")
+
+    with httpx.Client(base_url="http://localhost/v1") as http_client:
+        validate_http_client_origin(http_client, "http://localhost:80/v1")
+
+    with (
+        httpx.Client(auth=("user", "pass")) as authed_client,
+        pytest.raises(InvalidGatewaySettingsError, match="custom auth"),
+    ):
+        validate_http_client_origin(authed_client, "https://gateway.example.com/v1")

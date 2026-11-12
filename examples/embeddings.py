@@ -12,14 +12,10 @@ async def main() -> None:
     model = settings.default_embedding_model or "rag-embedding"
 
     async with settings.create_async_client() as client:
-        kwargs: dict[str, object] = {
-            "model": model,
-            "input": ["Polymarket rate cut probability", "Macroeconomic CPI forecast"],
-        }
-        if settings.embedding_dimensions is not None:
-            kwargs["dimensions"] = settings.embedding_dimensions
-
-        response = await client.embeddings.create(**kwargs)  # type: ignore[arg-type]
+        response = await client.embed(
+            model=model,
+            input=["Polymarket rate cut probability", "Macroeconomic CPI forecast"],
+        )
         for item in response.data:
             print(f"Document {item.index}: {len(item.embedding)} dimensions")
 

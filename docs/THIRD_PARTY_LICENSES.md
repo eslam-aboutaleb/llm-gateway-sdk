@@ -8,14 +8,12 @@ All mandatory and optional dependencies use permissive open-source licenses comp
 
 | Package | Version Constraint | License | Purpose |
 |---|---|---|---|
-| `openai` | `>=1.40.0,<3.0.0` | Apache-2.0 | Official OpenAI-compatible HTTP/SSE client and type definitions |
-| `httpx` (transitive) | `>=0.23.0,<1.0.0` | BSD-3-Clause | Underlying synchronous and asynchronous HTTP transport |
-| `pydantic` (transitive) | `>=2.0.0,<3.0.0` | MIT | Response model typing and validation |
+| `httpx` | `>=0.27.0,<1.0.0` | BSD-3-Clause | Synchronous and asynchronous HTTP/SSE transport |
+| `pydantic` | `>=2.7.0,<3.0.0` | MIT | Response model typing and validation |
 | `anyio` (transitive) | `>=3.5.0,<5.0.0` | MIT | Async concurrency primitives |
-| `distro` (transitive) | `>=1.7.0,<2.0.0` | Apache-2.0 | OS platform metadata |
-| `jiter` (transitive) | `>=0.4.0,<1.0.0` | MIT | Fast JSON parser |
-| `sniffio` (transitive) | `>=1.1.0,<2.0.0` | MIT OR Apache-2.0 | Async library detection |
-| `tqdm` (transitive) | `>=4.0.0` | MPL-2.0 AND MIT | Progress bar utility |
+| `certifi` (transitive) | `*` | MPL-2.0 | Root CA bundle for TLS verification |
+| `httpcore` (transitive) | `*` | BSD-3-Clause | Low-level HTTP transport |
+| `idna` (transitive) | `*` | BSD-3-Clause | Internationalized domain names |
 | `typing-extensions` (transitive) | `>=4.11,<5.0` | PSF-2.0 | Backported typing constructs |
 
 ## 2. Optional Integration Extras
@@ -23,9 +21,6 @@ All mandatory and optional dependencies use permissive open-source licenses comp
 | Extra | Package | Version Constraint | License | Commercial Restrictions |
 |---|---|---|---|---|
 | `settings` | `pydantic-settings` | `>=2.2.0,<3.0.0` | MIT | None |
-| `structured` | `instructor` | `>=1.4.0,<2.0.0` | MIT | None |
-| `langchain` | `langchain-openai` | `>=0.2.0,<2.0.0` | MIT | None |
-| `observability` | `traceloop-sdk` | `>=0.30.0,<1.0.0` | Apache-2.0 | None (self-hosted OTLP supported; no SaaS required) |
 
 ## 3. Development & CI Dependencies
 
@@ -39,4 +34,3 @@ All mandatory and optional dependencies use permissive open-source licenses comp
 | `hatchling` | MIT | PEP 517 build backend |
 | `build` | MIT | Package builder |
 | `twine` | Apache-2.0 | Distribution metadata validator |
-

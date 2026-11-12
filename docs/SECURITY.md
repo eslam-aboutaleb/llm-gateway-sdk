@@ -2,17 +2,17 @@
 
 ## 1. Consumer Virtual Keys Only
 
-`llm-gateway-sdk` is strictly designed for consumer applications using **LiteLLM virtual API keys**:
+`llm-gateway-sdk` is strictly designed for consumer applications using **Gateway virtual API keys**:
 - Never configure or pass `LITELLM_MASTER_KEY` to a consumer service.
-- If `LITELLM_MASTER_KEY` is present in the environment and matches the configured `api_key`, `GatewaySettings.from_env()` raises `InvalidGatewaySettingsError`.
+- If `LITELLM_MASTER_KEY` is present in the environment and matches the configured `api_key`, `GatewaySettings` and `GatewaySettings.from_env()` raise `InvalidGatewaySettingsError`.
 - Never silently falls back to `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or other upstream provider keys.
 
 ## 2. Secret Redaction
 
-- `GatewaySettings.__repr__()` and `str()` always replace `api_key` with `'[REDACTED]'`.
+- `GatewaySettings.__repr__()`, `GatewayClient.__repr__()`, and `AsyncGatewayClient.__repr__()` always replace `api_key` with `'[REDACTED]'`.
 - `GatewaySettings.to_dict()` redacts `api_key` unless `redact_secrets=False` is explicitly passed.
 - `GatewayBaseSettings` (Pydantic Settings extra) wraps validation with `redact_validation_errors` so `ValidationError.errors()` and `ValidationError.json()` replace all input values with `'[redacted]'`.
-- No validator ever echoes the raw `api_key` or URL credentials in exception messages.
+- No validator or HTTP error mapper ever echoes the raw `api_key` or URL credentials in exception messages.
 
 ## 3. URL & Origin Validation
 
@@ -25,6 +25,7 @@
 
 Furthermore, `validate_http_client_origin` verifies that any custom `httpx.Client` or `httpx.AsyncClient` passed to `create_client()` / `create_async_client()`:
 - Does not have `follow_redirects=True` (which could forward the `Authorization: Bearer <key>` header to a third-party redirect target).
+- Does not have custom `auth` configured on the `httpx` client.
 - Does not have a `base_url` pointing to a different scheme, hostname, or port than `settings.base_url`.
 
 ## 4. TLS Verification
@@ -34,6 +35,4 @@ Furthermore, `validate_http_client_origin` verifies that any custom `httpx.Clien
 
 ## 5. Prompt & Response Privacy
 
-- The core SDK performs zero logging of prompt messages or completion outputs.
-- Optional OpenLLMetry observability (`configure_observability`) sets `TRACELOOP_TRACE_CONTENT="false"` by default (`record_content=False`).
-
+- The SDK performs zero logging of prompt messages or completion outputs.

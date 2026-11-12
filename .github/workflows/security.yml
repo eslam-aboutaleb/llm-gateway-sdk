@@ -30,13 +30,30 @@ jobs:
         run: |
           uv run --frozen python - <<'PY'
           import importlib.metadata
-          forbidden = {"GPL", "AGPL", "LGPL", "SSPL", "BUSL", "Commercial"}
+          forbidden_tokens = (
+              "GNU General Public License",
+              "Affero General Public License",
+              "Lesser General Public License",
+              "Server Side Public License",
+              "Business Source License",
+              "GPL-",
+              "AGPL-",
+              "LGPL-",
+              "SSPL",
+              "BUSL",
+              "BSL-1.1",
+          )
           for dist in importlib.metadata.distributions():
               name = dist.metadata["Name"]
-              lic = (dist.metadata.get("License") or "") + " " + " ".join(dist.metadata.get_all("Classifier") or [])
-              for bad in forbidden:
-                  if f"License :: OSI Approved :: GNU General Public License" in lic or "Server Side Public License" in lic:
-                      raise SystemExit(f"Forbidden license detected in {name}: {lic}")
+              lic_fields = [
+                  dist.metadata.get("License") or "",
+                  dist.metadata.get("License-Expression") or "",
+                  *(dist.metadata.get_all("Classifier") or []),
+              ]
+              combined = " | ".join(lic_fields)
+              for bad in forbidden_tokens:
+                  if bad in combined:
+                      raise SystemExit(f"Forbidden license token '{bad}' detected in {name}: {combined}")
           print("All installed package licenses verified permissive.")
           PY
 

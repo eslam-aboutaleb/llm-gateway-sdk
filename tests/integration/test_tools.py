@@ -76,7 +76,7 @@ def test_single_and_parallel_tool_calls(mock_sync_client_factory: Any) -> None:
         response = client.chat.completions.create(
             model="agent-tools",
             messages=[{"role": "user", "content": "Check YES on 0xabc and NO on 0xdef"}],
-            tools=tools,  # type: ignore[arg-type]
+            tools=tools,
             tool_choice="required",
         )
 
@@ -86,6 +86,7 @@ def test_single_and_parallel_tool_calls(mock_sync_client_factory: Any) -> None:
 
     tool_calls = response.choices[0].message.tool_calls
     assert tool_calls is not None
+    assert response.tool_calls == tool_calls
     assert len(tool_calls) == 2
     assert json.loads(tool_calls[0].function.arguments) == {
         "condition_id": "0xabc",

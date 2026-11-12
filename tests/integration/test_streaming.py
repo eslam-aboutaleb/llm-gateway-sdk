@@ -8,7 +8,10 @@ from typing import Any
 import httpx
 import pytest
 
+from llm_gateway_sdk import GatewayBadRequestError, GatewayConnectionError
+
 SSE_PAYLOAD = (
+    b": keep-alive comment\n\n"
     b'data: {"id":"chatcmpl-stream-1","object":"chat.completion.chunk","created":1700000000,'
     b'"model":"general-fast","choices":[{"index":0,'
     b'"delta":{"role":"assistant","content":"Hello"},"finish_reason":null}]}\n\n'
@@ -22,7 +25,7 @@ SSE_PAYLOAD = (
 )
 
 
-def test_sync_streaming_chat_completion(mock_sync_client_factory: Any) -> None:
+def test_sync_streaming_chat_completion_and_iter_text(mock_sync_client_factory: Any) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
@@ -31,13 +34,36 @@ def test_sync_streaming_chat_completion(mock_sync_client_factory: Any) -> None:
         )
 
     with mock_sync_client_factory(handler) as client:
-        stream = client.chat.completions.create(
+        with client.stream(
+            model="general-fast",
+            messages=[{"role": "user", "content": "Greet me"}],
+        ) as stream:
+            assert stream.request_id == "stream-sync-1"
+            assert "".join(stream.iter_text()) == "Hello world!"
+
+        stream2 = client.chat.completions.create(
             model="general-fast",
             messages=[{"role": "user", "content": "Greet me"}],
             stream=True,
         )
-        chunks = [chunk.choices[0].delta.content or "" for chunk in stream]
+        chunks = [chunk.choices[0].delta.content or "" for chunk in stream2]
         assert "".join(chunks) == "Hello world!"
+
+
+def test_sync_streaming_http_error_raises_status_error(mock_sync_client_factory: Any) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            headers={"x-request-id": "stream-err-400"},
+            json={"error": {"message": "Invalid stream parameters"}},
+        )
+
+    with (
+        mock_sync_client_factory(handler) as client,
+        pytest.raises(GatewayBadRequestError) as exc_info,
+    ):
+        client.stream(messages=[{"role": "user", "content": "Fail"}])
+    assert exc_info.value.request_id == "stream-err-400"
 
 
 @pytest.mark.asyncio
@@ -52,15 +78,13 @@ async def test_async_streaming_chat_completion_and_early_cancellation(
         )
 
     async with mock_async_client_factory(handler) as async_client:
-        stream = await async_client.chat.completions.create(
+        async with await async_client.stream(
             model="general-fast",
             messages=[{"role": "user", "content": "Greet me"}],
-            stream=True,
-        )
-        collected: list[str] = []
-        async for chunk in stream:
-            collected.append(chunk.choices[0].delta.content or "")
-        assert "".join(collected) == "Hello world!"
+        ) as stream:
+            assert stream.request_id == "stream-async-1"
+            collected = [piece async for piece in stream.iter_text()]
+            assert "".join(collected) == "Hello world!"
 
         # Early cancellation after first chunk cleans up resources safely
         stream2 = await async_client.chat.completions.create(
@@ -70,6 +94,7 @@ async def test_async_streaming_chat_completion_and_early_cancellation(
         )
         first_chunk = await stream2.__anext__()
         assert first_chunk.choices[0].delta.content == "Hello"
+        assert first_chunk.content == "Hello"
         await stream2.close()
 
 
@@ -102,7 +127,7 @@ def test_partial_stream_failure_is_not_retried(mock_sync_client_factory: Any) ->
         iterator = iter(stream)
         first = next(iterator)
         assert first.choices[0].delta.content == "Partial"
-        with pytest.raises(httpx.ReadError):
+        with pytest.raises(GatewayConnectionError):
             next(iterator)
     assert attempts == 1
 
@@ -132,5 +157,5 @@ async def test_async_partial_stream_failure(mock_async_client_factory: Any) -> N
         )
         first = await stream.__anext__()
         assert first.choices[0].delta.content == "Part1"
-        with pytest.raises(httpx.ReadError):
+        with pytest.raises(GatewayConnectionError):
             await stream.__anext__()
