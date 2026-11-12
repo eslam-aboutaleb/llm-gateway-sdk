@@ -382,19 +382,13 @@ uv run mypy
 
 | Guide | Description |
 |---|---|
-| [Quickstart Guide](docs/QUICKSTART.md) | Step-by-step setup and basic calls |
 | [SDK Architecture & Layered Design](docs/SDK_ARCHITECTURE.md) | SOLID design principles and layer boundaries |
-| [Configuration Reference](docs/CONFIGURATION.md) | Environment variables, legacy aliases, and URL rules |
+| [Configuration Reference](docs/CONFIGURATION.md) | Environment variables, `GatewayBaseSettings`, legacy aliases, and URL rules |
 | [Client Lifecycle & FastAPI Guide](docs/CLIENT_LIFECYCLE.md) | Connection pooling, context managers, and FastAPI lifespan |
-| [Framework Integrations](docs/FRAMEWORK_INTEGRATIONS.md) | Pydantic Settings (`GatewayBaseSettings`) integration |
-| [Gateway Compatibility Matrix](docs/GATEWAY_COMPATIBILITY.md) | Allowed routes, model aliases, timeouts, and status codes |
 | [Error Handling & Retry Safety](docs/ERROR_HANDLING.md) | Exception hierarchy, `request_id` debugging, and retry safety |
-| [Security & Privacy Model](docs/SECURITY.md) | Virtual key enforcement, secret redaction, and origin checks |
-| [Polymarket Migration Guide](docs/POLYMARKET_MIGRATION.md) | Migrating `polymarket-ai-trading` to `llm-gateway-sdk` |
-| [Testing Guide](docs/TESTING.md) | Offline mock transport tests and opt-in `@pytest.mark.live` suite |
-| [Versioning Policy](docs/VERSIONING.md) | Semantic Versioning and gateway version decoupling |
-| [Release Process](docs/RELEASE_PROCESS.md) | Pre-release checklist, tagging, and package verification |
-| [Third-Party License Inventory](docs/THIRD_PARTY_LICENSES.md) | Permissive license audit for core and optional dependencies |
+| [Gateway Compatibility Matrix](docs/GATEWAY_COMPATIBILITY.md) | Allowed routes, model aliases, timeouts, and status codes |
+| [Security Policy](SECURITY.md) | Virtual key enforcement, secret redaction, and vulnerability reporting |
+| [Contributing Guide](CONTRIBUTING.md) | Architecture invariants, local development setup, and release checklist |
 
 ---
 

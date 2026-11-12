@@ -70,7 +70,7 @@ def test_build_default_headers_attribution_and_merging() -> None:
     settings = GatewaySettings(
         base_url="https://gateway.example.com/v1",
         api_key="sk-consumer-key",
-        app_name="polymarket-ai-trading",
+        app_name="my-service",
         environment="production",
         default_headers={"X-Correlation-ID": "req-123"},
     )
@@ -78,8 +78,8 @@ def test_build_default_headers_attribution_and_merging() -> None:
         extra_headers={"X-Extra": "true", "x-correlation-id": "req-456"}
     )
     assert headers == {
-        "X-Gateway-App-Name": "polymarket-ai-trading",
-        "X-Title": "polymarket-ai-trading",
+        "X-Gateway-App-Name": "my-service",
+        "X-Title": "my-service",
         "X-Gateway-Environment": "production",
         "x-correlation-id": "req-456",
         "X-Extra": "true",
@@ -111,7 +111,7 @@ def test_from_env_loads_all_llm_gateway_variables() -> None:
         "LLM_GATEWAY_EMBEDDING_DIMENSIONS": "1536",
         "LLM_GATEWAY_TIMEOUT": "45.5",
         "LLM_GATEWAY_MAX_RETRIES": "1",
-        "LLM_GATEWAY_APP_NAME": "polymarket-ai-trading",
+        "LLM_GATEWAY_APP_NAME": "my-service",
         "LLM_GATEWAY_ENVIRONMENT": "production",
         "LLM_GATEWAY_VERIFY_SSL": "true",
     }
@@ -123,7 +123,7 @@ def test_from_env_loads_all_llm_gateway_variables() -> None:
     assert settings.embedding_dimensions == 1536
     assert settings.timeout == 45.5
     assert settings.max_retries == 1
-    assert settings.app_name == "polymarket-ai-trading"
+    assert settings.app_name == "my-service"
     assert settings.environment == "production"
     assert settings.verify_ssl is True
 

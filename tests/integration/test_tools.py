@@ -59,7 +59,7 @@ def test_single_and_parallel_tool_calls(mock_sync_client_factory: Any) -> None:
             "type": "function",
             "function": {
                 "name": "get_market_price",
-                "description": "Retrieve current Polymarket price for a condition ID",
+                "description": "Retrieve current market price for an instrument ID",
                 "parameters": {
                     "type": "object",
                     "properties": {

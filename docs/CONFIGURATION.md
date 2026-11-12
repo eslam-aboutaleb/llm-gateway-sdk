@@ -13,7 +13,7 @@ settings = GatewaySettings(
     embedding_dimensions=1536,
     timeout=30.0,
     max_retries=0,
-    app_name="polymarket-ai-trading",
+    app_name="my-service",
     environment="production",
 )
 ```
@@ -51,10 +51,33 @@ Existing applications that configure `LITELLM_API_BASE`, `LITELLM_API_KEY`, `LIT
 settings = GatewaySettings.from_env(allow_legacy_litellm_env=True)
 ```
 
-## 3. Base URL Rules
+## 3. Pydantic Settings Integration (`llm-gateway-sdk[settings]`)
+
+```bash
+pip install "llm-gateway-sdk[settings]"
+```
+
+```python
+from llm_gateway_sdk.integrations.pydantic_settings import GatewayBaseSettings
+
+
+class ServiceSettings(GatewayBaseSettings):
+    service_name: str = "my-service"
+
+
+settings = ServiceSettings()
+client = settings.create_client()
+```
+
+Features:
+- Accepts `LLM_GATEWAY_*` (including `LLM_GATEWAY_URL` and `LLM_GATEWAY_KEY`) and legacy `LITELLM_*` environment variables via `AliasChoices`.
+- Masks `gateway_base` and `gateway_key` using `SecretStr`.
+- Redacts all `ValidationError` input payloads to `"[redacted]"` so credentials never leak in error logs or JSON dumps.
+
+## 4. Base URL Rules
 
 - Must use `http://` or `https://`.
 - Must include a valid hostname and valid port (`1..65535`).
 - Must **not** contain embedded `username:password@` credentials, `?query` parameters, `#fragment` identifiers, whitespace, control characters, or backslashes (`\`).
-- `GatewaySettings` preserves the supplied URL path verbatim and does **not** automatically append or strip `/v1`. Always include `/v1` in `LLM_GATEWAY_BASE_URL` (e.g., `https://gateway.example.com/v1`) as required by the LiteLLM Gateway contract.
+- `GatewaySettings` preserves the supplied URL path verbatim and does **not** automatically append or strip `/v1`. Always include `/v1` in `LLM_GATEWAY_BASE_URL` (e.g., `https://gateway.example.com/v1`) as required by the gateway route contract.
 

@@ -14,7 +14,7 @@ async def main() -> None:
     async with settings.create_async_client() as client:
         response = await client.embed(
             model=model,
-            input=["Polymarket rate cut probability", "Macroeconomic CPI forecast"],
+            input=["Document retrieval query", "Macroeconomic CPI forecast"],
         )
         for item in response.data:
             print(f"Document {item.index}: {len(item.embedding)} dimensions")

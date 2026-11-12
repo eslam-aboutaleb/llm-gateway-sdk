@@ -76,7 +76,7 @@ jobs:
           s = GatewaySettings(base_url='https://gateway.example.com/v1', api_key='sk-test')
           c = s.create_client()
           c.close()
-          for optional_pkg in ('openai', 'pydantic_settings', 'instructor', 'langchain_openai', 'traceloop'):
+          for optional_pkg in ('openai', 'pydantic_settings'):
               assert importlib.util.find_spec(optional_pkg) is None, f'{optional_pkg} should not be in core'
           "
 

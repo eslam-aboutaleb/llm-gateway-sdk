@@ -47,7 +47,7 @@ def test_single_and_batch_embeddings_with_dimensions(
 
     with mock_sync_client_factory(handler) as client:
         # High-level client.embed() uses default_embedding_model and embedding_dimensions
-        single = client.embed(input="Polymarket rate decision market")
+        single = client.embed(input="Interest rate decision summary")
         assert len(single.data) == 1
         assert len(single.data[0].embedding) == 1536
         assert len(single.embeddings) == 1

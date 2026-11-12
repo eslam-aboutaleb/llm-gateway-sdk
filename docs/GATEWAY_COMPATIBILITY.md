@@ -63,25 +63,25 @@ From `gateway/config/litellm.yaml` and `gateway/config/model-catalog.yaml`:
 
 ## 5. Error & Status Code Semantics
 
-Because `llm-gateway-sdk` returns native `openai.OpenAI` and `openai.AsyncOpenAI` instances, HTTP errors returned by LiteLLM or Caddy map directly to standard OpenAI exceptions:
+`llm-gateway-sdk` maps HTTP status codes and transport errors returned by the gateway directly to typed, provider-agnostic SDK exceptions:
 
-| HTTP Status | OpenAI SDK Exception | Gateway Cause |
+| HTTP Status | `llm-gateway-sdk` Exception | Gateway Cause |
 |---|---|---|
-| `400 Bad Request` | `openai.BadRequestError` | Invalid parameters, unsupported model alias, or Caddy 4xx error handler |
-| `401 Unauthorized` | `openai.AuthenticationError` | Missing, invalid, expired, or revoked virtual API key |
-| `403 Forbidden` | `openai.PermissionDeniedError` | Key not authorized for the requested model alias or route |
-| `404 Not Found` | `openai.NotFoundError` | Non-allowlisted route blocked by Caddy or unknown endpoint |
-| `408 Request Timeout` / Timeout | `openai.APITimeoutError` | Client or gateway timeout exceeded |
-| `422 Unprocessable Entity` | `openai.UnprocessableEntityError` | Request schema validation failure |
-| `429 Too Many Requests` | `openai.RateLimitError` | Virtual key RPM, TPM, concurrency, or budget limit exceeded |
-| `500` / `502` / `503` / `504` | `openai.InternalServerError` | Upstream provider failure after gateway retries or Caddy 503 error handler |
-| Network / TLS Error | `openai.APIConnectionError` | DNS, TCP, or TLS certificate verification failure |
+| `400 Bad Request` | `GatewayBadRequestError` | Invalid parameters, unsupported model alias, or Caddy 4xx error handler |
+| `401 Unauthorized` | `GatewayAuthenticationError` | Missing, invalid, expired, or revoked virtual API key |
+| `403 Forbidden` | `GatewayPermissionDeniedError` | Key not authorized for the requested model alias or route |
+| `404 Not Found` | `GatewayNotFoundError` | Non-allowlisted route blocked by Caddy or unknown endpoint |
+| `408 Request Timeout` / Timeout | `GatewayTimeoutError` | Client or gateway timeout exceeded |
+| `422 Unprocessable Entity` | `GatewayUnprocessableEntityError` | Request schema validation failure |
+| `429 Too Many Requests` | `GatewayRateLimitError` | Virtual key RPM, TPM, concurrency, or budget limit exceeded |
+| `500` / `502` / `503` / `504` | `GatewayInternalServerError` | Upstream provider failure after gateway retries or Caddy 503 error handler |
+| Network / TLS Error | `GatewayConnectionError` | DNS, TCP, or TLS certificate verification failure |
 
 ---
 
 ## 6. Compatibility Matrix
 
-| `llm-gateway-sdk` Version | Python Versions | `openai` SDK Range | LiteLLM Proxy Version | Tested Endpoints & Capabilities |
+| `llm-gateway-sdk` Version | Python Versions | Core Dependencies | Gateway Proxy Version | Tested Endpoints & Capabilities |
 |---|---|---|---|---|
-| `0.1.0` | `>=3.10` (`3.10`, `3.11`, `3.12`, `3.13`) | `>=1.40.0,<3.0.0` (tested on `1.x` & `2.x`) | `v1.46.1` (OpenAI-compatible proxy API v1) | `POST /v1/chat/completions` (sync, async, streaming, tools, JSON/structured), `POST /v1/embeddings`, `GET /v1/models` |
+| `0.1.0` | `>=3.10` (`3.10`, `3.11`, `3.12`, `3.13`) | `httpx>=0.27.0,<1.0.0`, `pydantic>=2.7.0,<3.0.0` | `v1.46.1` (HTTP/SSE JSON API v1) | `POST /v1/chat/completions` (sync, async, streaming, tools, JSON/structured), `POST /v1/embeddings`, `GET /v1/models`, `GET /health` |
 

@@ -18,7 +18,7 @@ def isolate_gateway_env(monkeypatch: pytest.MonkeyPatch) -> None:
     if os.getenv("LLM_GATEWAY_LIVE_TESTS", "").lower() in {"1", "true", "yes"}:
         return
     for key in list(os.environ):
-        if key.startswith(("LLM_GATEWAY_", "LITELLM_", "OPENAI_", "RAG_EMBEDDING_", "TRACELOOP_")):
+        if key.startswith(("LLM_GATEWAY_", "LITELLM_", "OPENAI_", "RAG_EMBEDDING_")):
             monkeypatch.delenv(key, raising=False)
 
 
