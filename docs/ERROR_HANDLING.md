@@ -38,13 +38,20 @@ except GatewayAPIStatusError as exc:
     print(f"Gateway returned HTTP {exc.status_code} (request_id={exc.request_id})")
 ```
 
-## 3. Retry Strategy & Safety (`max_retries=0`)
+## 3. Retry Strategy & Timeout Configuration
 
-The LLM Gateway (`gateway/config/litellm.yaml`) is already configured with:
-- `num_retries: 2` on status codes `[429, 500, 502, 503, 504]`
-- Latency-based routing and model fallbacks
-
-Therefore, `GatewaySettings` sets `max_retries=0` by default:
-- Prevents multiplying `3` client attempts by `3` gateway attempts (`9` total provider calls).
+The LLM Gateway already handles upstream provider retries and model fallbacks automatically. Therefore, `GatewaySettings` defaults to `max_retries=0` and `timeout=30.0`:
+- Prevents multiplying client retries with gateway retries.
 - Prevents duplicate token billing when a client read timeout occurs while the upstream provider is still generating a completion.
 - Never retries a streaming response after chunks have already been yielded.
+
+You can customize `timeout` per client or per request:
+
+```python
+with settings.create_client(timeout=60.0) as client:
+    response = client.complete(
+        model="general-reasoning",
+        messages=[{"role": "user", "content": "Analyze this scenario."}],
+        timeout=90.0,
+    )
+```

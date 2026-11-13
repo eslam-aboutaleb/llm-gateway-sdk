@@ -28,9 +28,7 @@ Built directly on **`httpx` and `pydantic`** with **zero dependency on `openai`,
   - [6. Error Handling & Request IDs](#6-error-handling--request-ids)
 - [Optional Ecosystem Integrations](#optional-ecosystem-integrations)
 - [Gateway Model Aliases & Route Contract](#gateway-model-aliases--route-contract)
-- [Layered Architecture](#layered-architecture)
-- [Development & Testing](#development--testing)
-- [Documentation Index](#documentation-index)
+- [User Guides](#user-guides)
 - [License](#license)
 
 ---
@@ -337,58 +335,13 @@ Standard model aliases configured on the companion [`llm-gateway`](https://githu
 
 ---
 
-## Layered Architecture
-
-The codebase enforces a strict 5-layer unidirectional dependency graph:
-
-```mermaid
-flowchart TD
-    L4["Layer 4: Optional Configuration Adapters<br/>(integrations/pydantic_settings.py)"]
-    L3["Layer 3: Gateway HTTP/SSE Clients<br/>(clients.py: GatewayClient, AsyncGatewayClient)"]
-    L2["Layer 2: Configuration & Response Models<br/>(settings.py: GatewaySettings, models.py: ChatResponse, EmbeddingResponse, GatewayStream)"]
-    L1["Layer 1: Validation & Security Boundary<br/>(validation.py: URL, key, timeout, header & origin validators)"]
-    L0["Layer 0: Domain Primitives<br/>(constants.py, exceptions.py)"]
-
-    L4 --> L3
-    L3 --> L2
-    L2 --> L1
-    L1 --> L0
-```
-
----
-
-## Development & Testing
-
-All unit, integration, and gateway contract tests run **100% offline** using `httpx.MockTransport`—no live API keys or running gateway required:
-
-```bash
-# Install development dependencies
-uv sync --group dev
-
-# Run test suite with branch coverage (>= 90% required)
-uv run pytest --cov=llm_gateway_sdk --cov-report=term-missing
-
-# Run Ruff linter & formatter checks
-uv run ruff check .
-uv run ruff format --check .
-
-# Run strict Mypy type checking across src, tests, and examples
-uv run mypy
-```
-
----
-
-## Documentation Index
+## User Guides
 
 | Guide | Description |
 |---|---|
-| [SDK Architecture & Layered Design](docs/SDK_ARCHITECTURE.md) | SOLID design principles and layer boundaries |
-| [Configuration Reference](docs/CONFIGURATION.md) | Environment variables, `GatewayBaseSettings`, legacy aliases, and URL rules |
+| [Configuration Guide](docs/CONFIGURATION.md) | Environment variables, `GatewayBaseSettings`, legacy aliases, and URL rules |
 | [Client Lifecycle & FastAPI Guide](docs/CLIENT_LIFECYCLE.md) | Connection pooling, context managers, and FastAPI lifespan |
-| [Error Handling & Retry Safety](docs/ERROR_HANDLING.md) | Exception hierarchy, `request_id` debugging, and retry safety |
-| [Gateway Compatibility Matrix](docs/GATEWAY_COMPATIBILITY.md) | Allowed routes, model aliases, timeouts, and status codes |
-| [Security Policy](SECURITY.md) | Virtual key enforcement, secret redaction, and vulnerability reporting |
-| [Contributing Guide](CONTRIBUTING.md) | Architecture invariants, local development setup, and release checklist |
+| [Error Handling & Timeouts](docs/ERROR_HANDLING.md) | Exception hierarchy, `request_id` debugging, and timeout configuration |
 
 ---
 
